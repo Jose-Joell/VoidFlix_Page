@@ -285,6 +285,15 @@ button { cursor:pointer; font-family:'Barlow',sans-serif; }
   padding: 18px 24px;
   background: linear-gradient(180deg, rgba(0,0,0,.85) 0%, transparent 100%);
   pointer-events: all;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity .4s ease, transform .4s ease;
+}
+/* Estado oculto — se activa con clase JS */
+.player-topbar.hidden {
+  opacity: 0;
+  transform: translateY(-100%);
+  pointer-events: none;
 }
 .player-close {
   width: 40px; height: 40px;
@@ -449,11 +458,10 @@ button { cursor:pointer; font-family:'Barlow',sans-serif; }
   transition: transform .42s cubic-bezier(.22,.68,0,1.15), opacity .35s ease, box-shadow .4s ease;
   border: 1px solid rgba(29,185,84,.12);
   box-shadow: 0 8px 30px rgba(0,0,0,.4);
-  will-change: transform, opacity;
 }
 #movie-modal-overlay.open #movie-modal {
   opacity: 1;
-  transform: scale(1) translateY(0);
+  transform: none;
   box-shadow: 0 40px 100px rgba(0,0,0,.95), 0 0 0 1px rgba(29,185,84,.1);
 }
 #movie-modal-overlay.exiting #movie-modal {
@@ -487,7 +495,14 @@ button { cursor:pointer; font-family:'Barlow',sans-serif; }
 }
 .mm-hero-grad {
   position: absolute; inset: 0; z-index: 3; pointer-events: none;
-  background: linear-gradient(0deg, #141a15 0%, rgba(20,26,21,.15) 55%, transparent 100%);
+  background:
+    linear-gradient(0deg,
+      #141a15 0%,
+      #141a15 2%,
+      rgba(20,26,21,.85) 25%,
+      rgba(20,26,21,.2) 55%,
+      transparent 100%
+    );
 }
 .mm-close {
   position: absolute; top: 12px; right: 12px; z-index: 10;
@@ -568,11 +583,10 @@ button { cursor:pointer; font-family:'Barlow',sans-serif; }
   border:1px solid rgba(29,185,84,.15);
   box-shadow: 0 8px 30px rgba(0,0,0,.4);
   scrollbar-width:thin; scrollbar-color:var(--green) transparent;
-  will-change: transform, opacity;
 }
 .modal-overlay.open .modal {
   opacity: 1;
-  transform: scale(1) translateY(0);
+  transform: none;
   box-shadow: 0 40px 100px rgba(0,0,0,.9), 0 0 0 1px rgba(29,185,84,.1);
 }
 .modal-overlay.exiting .modal {
@@ -1068,25 +1082,6 @@ let playerState = {
 
 let statusTimer = null;
 
-function openPlayer(id, type, title, subtitle = '', season = 1, episode = 1) {
-  playerState = { id, type, season, episode, title, subtitle, currentServer: 0 };
-
-  document.getElementById('player-title').textContent    = title;
-  document.getElementById('player-subtitle').textContent = subtitle;
-
-  // Reset todos los botones de servidor (ahora son 6)
-  document.querySelectorAll('.server-btn').forEach((b, i) => {
-    b.classList.toggle('active', i === 0);
-  });
-
-  loadServer(0);
-  document.getElementById('player-overlay').style.display = 'flex';
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    document.getElementById('player-overlay').classList.add('open');
-  }));
-  document.body.style.overflow = 'hidden';
-}
-
 function loadServer(serverIdx) {
   playerState.currentServer = serverIdx;
   const { id, type, season, episode } = playerState;
@@ -1123,7 +1118,57 @@ function showServerStatus(msg, isError = false) {
   statusTimer = setTimeout(() => el.classList.remove('show'), 3500);
 }
 
+// ── Auto-hide topbar ─────────────────────────────────
+let topbarHideTimer = null;
+let topbarInitialized = false;
+
+function showTopbar() {
+  const bar = document.querySelector('.player-topbar');
+  if (!bar) return;
+  bar.classList.remove('hidden');
+  clearTimeout(topbarHideTimer);
+  topbarHideTimer = setTimeout(() => bar.classList.add('hidden'), 3000);
+}
+
+function initTopbarAutoHide() {
+  if (topbarInitialized) return;
+  topbarInitialized = true;
+  const overlay = document.getElementById('player-overlay');
+  const bar = document.querySelector('.player-topbar');
+  overlay.addEventListener('mousemove', showTopbar);
+  overlay.addEventListener('touchstart', showTopbar, { passive: true });
+  bar.addEventListener('mouseenter', () => {
+    clearTimeout(topbarHideTimer);
+    bar.classList.remove('hidden');
+  });
+  bar.addEventListener('mouseleave', () => {
+    topbarHideTimer = setTimeout(() => bar.classList.add('hidden'), 3000);
+  });
+}
+
+function openPlayer(id, type, title, subtitle = '', season = 1, episode = 1) {
+  playerState = { id, type, season, episode, title, subtitle, currentServer: 0 };
+
+  document.getElementById('player-title').textContent    = title;
+  document.getElementById('player-subtitle').textContent = subtitle;
+
+  document.querySelectorAll('.server-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === 0);
+  });
+
+  loadServer(0);
+  document.getElementById('player-overlay').style.display = 'flex';
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    document.getElementById('player-overlay').classList.add('open');
+    initTopbarAutoHide();
+    showTopbar();
+  }));
+  document.body.style.overflow = 'hidden';
+}
+
 function closePlayer() {
+  clearTimeout(topbarHideTimer);
+  document.querySelector('.player-topbar').classList.remove('hidden');
   document.getElementById('player-overlay').classList.remove('open');
   document.getElementById('player-overlay').style.display = '';
   document.getElementById('player-iframe').src = '';
@@ -1322,6 +1367,194 @@ const EPISODES_BY_SHOW = {
     {n:8,t:'What\'s for Dinner?',     d:'El plan maestro se pone en marcha con consecuencias que cambiarán todo.',                    dur:'39min',s:1,e:8},
     {n:9,t:'The We We Are',           d:'Cliffhanger final de temporada. Las verdades salen a la luz.',                               dur:'53min',s:1,e:9},
   ],
+  // ── SERIES ADICIONALES ─────────────────────────────────
+  136315: [ // The Bear
+    {n:1,  t:'System',          d:'Carmy regresa a Chicago para hacerse cargo del restaurante familiar de su hermano fallecido.',             dur:'33min',s:1,e:1},
+    {n:2,  t:'Hands',           d:'La cocina enfrenta una crisis mientras Carmy intenta implementar nuevos estándares profesionales.',        dur:'24min',s:1,e:2},
+    {n:3,  t:'Brigade',         d:'Carmy contrata a un nuevo empleado y la tensión en la cocina alcanza un punto de ebullición.',             dur:'26min',s:1,e:3},
+    {n:4,  t:'Dogs',            d:'Un día caótico en el restaurante pone a prueba la paciencia y habilidad de todo el equipo.',               dur:'27min',s:1,e:4},
+    {n:5,  t:'Sheridan',        d:'Carmy visita a su familia mientras Marcus trabaja en una nueva receta de donas.',                          dur:'27min',s:1,e:5},
+    {n:6,  t:'Ceres',           d:'Sydney intenta hacer las cosas a su manera y choca con la cultura establecida del restaurante.',           dur:'29min',s:1,e:6},
+    {n:7,  t:'Review',          d:'Una crítica anónima amenaza con hundir el restaurante justo cuando las cosas empezaban a mejorar.',        dur:'27min',s:1,e:7},
+    {n:8,  t:'Braciole',        d:'El pasado de Carmy y los traumas familiares salen a la luz en un turno especialmente difícil.',            dur:'27min',s:1,e:8},
+  ],
+  94997: [ // House of the Dragon
+    {n:1,  t:'The Heirs of the Dragon',     d:'El rey Viserys celebra un torneo para anunciar el nacimiento de su heredero. La tragedia cambia el curso del reino.',       dur:'66min',s:1,e:1},
+    {n:2,  t:'The Rogue Prince',            d:'Daemon ocupa Piedra del Dragón. Viserys considera un nuevo matrimonio para asegurar la sucesión.',                          dur:'54min',s:1,e:2},
+    {n:3,  t:'Second of His Name',          d:'Han pasado tres años. Viserys y Alicent tienen un hijo. Rhaenyra lucha por demostrar su valía en la cacería real.',         dur:'63min',s:1,e:3},
+    {n:4,  t:'King of the Narrow Sea',      d:'Daemon regresa a Desembarco del Rey con victorias y regalos. Su cercanía con Rhaenyra levanta sospechas.',                  dur:'60min',s:1,e:4},
+    {n:5,  t:'We Light the Way',            d:'Rhaenyra es prometida a Laenor Velaryon. La boda planificada termina en tragedia.',                                         dur:'60min',s:1,e:5},
+    {n:6,  t:'The Princess and the Queen',  d:'Diez años después. Rhaenyra y Alicent tienen hijos. Las tensiones entre sus familias se intensifican.',                     dur:'59min',s:1,e:6},
+    {n:7,  t:'Driftmark',                   d:'La muerte de Laena Velaryon reúne a las familias. Un incidente nocturno en la playa cambia todo.',                          dur:'67min',s:1,e:7},
+    {n:8,  t:'The Lord of the Tides',       d:'Seis años más tarde. Viserys agoniza. La sucesión de Driftmark desata una crisis en la corte.',                            dur:'68min',s:1,e:8},
+    {n:9,  t:'The Green Council',           d:'El rey ha muerto. El Consejo Verde actúa rápidamente para coronar a Aegon antes de que Rhaenyra se entere.',                dur:'64min',s:1,e:9},
+    {n:10, t:'The Black Queen',             d:'Rhaenyra recibe la noticia de la traición. Los Negros se preparan para la guerra mientras buscan aliados.',                  dur:'57min',s:1,e:10},
+  ],
+  83867: [ // Andor
+    {n:1,  t:'Kassa',                   d:'Cassian Andor busca a su hermana perdida en un planeta corporativo, desencadenando una serie de eventos fatales.',      dur:'51min',s:1,e:1},
+    {n:2,  t:'That Would Be Me',        d:'Cassian huye mientras la corporación PREOX-MORLANA envía agentes para capturarlo.',                                     dur:'42min',s:1,e:2},
+    {n:3,  t:'Reckoning',               d:'Cassian escapa con dificultad. Luthen Rael llega con una propuesta que podría cambiar su vida.',                        dur:'46min',s:1,e:3},
+    {n:4,  t:'Aldhani',                 d:'Cassian llega a Aldhani para unirse a un pequeño grupo rebelde con una misión imposible.',                              dur:'46min',s:1,e:4},
+    {n:5,  t:'The Axe Forgets',         d:'Los rebeldes ensayan el atraco. Cassian conoce mejor al equipo y los riesgos que implica la misión.',                   dur:'50min',s:1,e:5},
+    {n:6,  t:'The Eye',                 d:'El atraco al Imperio comienza. Todo debe salir perfecto durante el festival astronómico de Aldhani.',                   dur:'62min',s:1,e:6},
+    {n:7,  t:'Announcement',            d:'El Imperio responde al atraco con nuevas leyes represivas. Cassian intenta retirarse a una vida tranquila.',            dur:'40min',s:1,e:7},
+    {n:8,  t:'Narkina 5',               d:'Cassian es arrestado injustamente y enviado a una prisión de trabajo forzado del Imperio.',                             dur:'46min',s:1,e:8},
+    {n:9,  t:'Nobody\'s Listening!',    d:'En la prisión, Cassian descubre la verdad sobre las condenas. Los detenidos planean un levantamiento.',                 dur:'46min',s:1,e:9},
+    {n:10, t:'One Way Out',             d:'El plan de fuga se ejecuta. Una decisión desesperada puede costarle la vida a muchos.',                                 dur:'51min',s:1,e:10},
+    {n:11, t:'Daughter of Ferrix',      d:'Cassian regresa a Ferrix al enterarse de que su madre está enferma. El Imperio tiende una trampa.',                     dur:'51min',s:1,e:11},
+    {n:12, t:'Rix Road',                d:'El funeral de Maarva se convierte en un detonante. Ferrix explota en una rebelión espontánea.',                         dur:'56min',s:1,e:12},
+  ],
+  111803: [ // The White Lotus
+    {n:1,  t:'Arrivals',        d:'Los huéspedes llegan al lujoso resort White Lotus en Hawaii. Cada grupo trae sus propias tensiones ocultas.',                   dur:'52min',s:1,e:1},
+    {n:2,  t:'New Day',         d:'Las dinámicas entre huéspedes y empleados comienzan a revelarse. Shane exige la suite que reservó.',                            dur:'48min',s:1,e:2},
+    {n:3,  t:'Mysterious Mongers', d:'Las relaciones se complican. Paula se acerca a un empleado local mientras Tanya busca consuelo espiritual.',                dur:'55min',s:1,e:3},
+    {n:4,  t:'Recentering',     d:'Una excursión en bote revela tensiones. Belinda ayuda a Tanya con su duelo mientras Shane escala su conflicto.',               dur:'50min',s:1,e:4},
+    {n:5,  t:'The Lotus-Eaters',d:'Los huéspedes se adentran en sus fantasías. El personal lucha con sus propios problemas mientras la semana avanza.',           dur:'56min',s:1,e:5},
+    {n:6,  t:'Departures',      d:'La semana llega a su fin. Cada historia converge en una conclusión que revela lo mejor y peor de cada personaje.',             dur:'60min',s:1,e:6},
+  ],
+  76331: [ // Succession
+    {n:1,  t:'Celebration',             d:'El cumpleaños 80 de Logan Roy reúne a la familia. Kendall recibe una noticia que podría cambiar todo.',                dur:'56min',s:1,e:1},
+    {n:2,  t:'Shit Show at the Fuck Factory', d:'La familia Roy enfrenta una crisis pública. Logan evalúa quién de sus hijos es digno de sucederlo.',            dur:'55min',s:1,e:2},
+    {n:3,  t:'Lifeboats',               d:'Waystar RoyCo enfrenta problemas financieros. Kendall negocia un rescate mientras Logan observa.',                    dur:'59min',s:1,e:3},
+    {n:4,  t:'Sad Sack Wasp Trap',      d:'Logan organiza una reunión familiar en su casa de campo. Las alianzas se forman y se rompen.',                        dur:'55min',s:1,e:4},
+    {n:5,  t:'I Went to Market',        d:'Connor organiza una fiesta. Shiv navega su rol como asesora política mientras Tom enfrenta presiones.',               dur:'54min',s:1,e:5},
+    {n:6,  t:'Which Side Are You On?',  d:'Los empleados de Waystar votan sobre sindicalización. Los Roy se ven obligados a tomar partido.',                     dur:'55min',s:1,e:6},
+    {n:7,  t:'Austerlitz',              d:'Logan lleva a la familia a su retiro en Nuevo México para una intervención. Las tensiones estallan.',                 dur:'55min',s:1,e:7},
+    {n:8,  t:'Prague',                  d:'Roman y Kendall viajan a Europa en una misión empresarial que se descontrola rápidamente.',                           dur:'54min',s:1,e:8},
+    {n:9,  t:'Pre-Nuptial',             d:'La boda de Shiv y Tom se acerca. Logan hace una revelación que sacude los planes de toda la familia.',                dur:'56min',s:1,e:9},
+    {n:10, t:'Nobody Is Ever Missing',  d:'La boda se celebra pero una tragedia fuera de cámara cambia todo. El futuro de los Roy queda en suspenso.',           dur:'68min',s:1,e:10},
+  ],
+  85937: [ // Demon Slayer S3 — usamos T1 base
+    {n:1,  t:'Inmersión en las Nieblas de la Aldea del Herrero', d:'Tanjiro llega a la Aldea del Herrero en busca de reparaciones para su espada.',              dur:'25min',s:1,e:1},
+    {n:2,  t:'Sorpresa',                d:'Los demonios atacan la aldea. Tanjiro se enfrenta a una amenaza inesperada.',                                         dur:'25min',s:1,e:2},
+    {n:3,  t:'Una Espada del Amor',     d:'Muichiro y Genya combaten en sus propios frentes mientras Tanjiro protege a los aldeanos.',                           dur:'25min',s:1,e:3},
+    {n:4,  t:'La Voz de Aquellos que Caen', d:'Los Pilares luchan contra demonios de alto rango. El pasado de Hantengu es revelado.',                           dur:'25min',s:1,e:4},
+    {n:5,  t:'El Demonio del Odio Eterno', d:'Tanjiro descubre los poderes especiales de Hantengu y debe encontrar la manera de detenerlo.',                    dur:'25min',s:1,e:5},
+    {n:6,  t:'Renacimiento de Gyokko',  d:'Gyokko revela su verdadera forma. Muichiro recobra sus recuerdos y su poder se transforma.',                         dur:'25min',s:1,e:6},
+    {n:7,  t:'Escamas Brillantes',      d:'La batalla contra Hantengu se intensifica. Tanjiro desarrolla una nueva técnica desesperada.',                       dur:'25min',s:1,e:7},
+    {n:8,  t:'Bienvenido a la Aldea del Herrero', d:'El amanecer se acerca y Tanjiro lucha contra el tiempo para derrotar a Hantengu antes del alba.',          dur:'46min',s:1,e:8},
+    {n:9,  t:'Mitsuri Kanroji',         d:'La Piloto del Amor entra en acción. Su estilo único de combate sorprende a propios y extraños.',                     dur:'25min',s:1,e:9},
+    {n:10, t:'Never Give Up',           d:'Las batallas llegan a su punto culminante. Los cazadores de demonios se enfrentan a su límite absoluto.',             dur:'49min',s:1,e:10},
+    {n:11, t:'Decidido',                d:'Final de arco. Las consecuencias de la batalla se sienten en toda la aldea y el viaje de Tanjiro continúa.',         dur:'51min',s:1,e:11},
+  ],
+  95479: [ // Jujutsu Kaisen S2
+    {n:1,  t:'Tomada de Decisiones',    d:'Gojo joven recibe una misión de escolta de alto riesgo junto a Geto. El pasado del maestro más poderoso.',            dur:'24min',s:1,e:1},
+    {n:2,  t:'Magia Prohibida',         d:'Gojo y Geto protegen a Riko Amanai, la estrella vasija, mientras varios grupos intentan eliminarla.',                 dur:'24min',s:1,e:2},
+    {n:3,  t:'Noche de Estrellas',      d:'El Clan Q ataca. Gojo descubre el potencial oculto de su técnica del Infinito.',                                     dur:'24min',s:1,e:3},
+    {n:4,  t:'Técnica Oculta',          d:'Gojo despierta el Infinito de manera permanente. La misión de proteger a Riko alcanza su punto crítico.',             dur:'24min',s:1,e:4},
+    {n:5,  t:'Harutas Magia',           d:'El destino de Riko es sellado. Geto comienza a cuestionar el propósito de proteger a los no-hechiceros.',             dur:'24min',s:1,e:5},
+    {n:6,  t:'El Día Que Más Odié a Gojo Satoru', d:'Un año después. Geto toma una decisión irreversible que lo separa para siempre de Gojo.',                  dur:'24min',s:1,e:6},
+    {n:7,  t:'Incidente de Shibuya: Inicio', d:'Octubre de 2018. Hechiceros y maldiciones bloquean Shibuya. La batalla más grande comienza.',                   dur:'24min',s:1,e:7},
+    {n:8,  t:'El Pasado',               d:'Yuji e Ijichi luchan por entrar a Shibuya. Gojo avanza solo hacia el epicentro del caos.',                           dur:'24min',s:1,e:8},
+    {n:9,  t:'Caída',                   d:'Gojo enfrenta a Jogo, Hanami y Choso simultáneamente. Su poder sin límites se manifiesta en todo su esplendor.',     dur:'24min',s:1,e:9},
+    {n:10, t:'Shibuya',                 d:'La trampa de los malditos se activa. Gojo es sellado y la balanza del mundo cambia para siempre.',                   dur:'47min',s:1,e:10},
+    {n:11, t:'Divergencia',             d:'Con Gojo fuera de combate, los hechiceros restantes deben enfrentar las maldiciones sin su protección.',              dur:'24min',s:1,e:11},
+    {n:12, t:'Maldición del Hombre',    d:'Yuji descubre la verdad sobre Choso. La batalla en Shibuya continúa con bajas devastadoras.',                        dur:'24min',s:1,e:12},
+    {n:13, t:'El Verdadero Sonido',     d:'Nanami, Nobara y Yuji enfrentan a Mahito. Una pérdida irreparable sacude a los hechiceros.',                         dur:'47min',s:1,e:13},
+    {n:14, t:'Verdad',                  d:'Yuji cae en la desesperación. La aparición de un aliado inesperado le da una última oportunidad.',                   dur:'24min',s:1,e:14},
+    {n:15, t:'Destrucción',             d:'Toji Fushiguro regresa de entre los muertos. Su reencuentro con Megumi tiene consecuencias imprevistas.',             dur:'24min',s:1,e:15},
+    {n:16, t:'El Hechicero',            d:'El incidente de Shibuya llega a su fin. El mundo hechicero nunca volverá a ser el mismo.',                           dur:'47min',s:1,e:16},
+    {n:17, t:'Escoria',                 d:'Las consecuencias del incidente. Yuji es declarado oficialmente muerto por el mundo hechicero.',                     dur:'24min',s:1,e:17},
+    {n:18, t:'El Inicio de Todo',       d:'Yuta Okkotsu regresa de África. Los hechiceros se reagrupan ante una nueva amenaza.',                                dur:'24min',s:1,e:18},
+    {n:19, t:'La Ilusión del Caos',     d:'Yuji y Yuta se enfrentan. La verdad sobre las órdenes de ejecutar a Yuji sale a la luz.',                            dur:'24min',s:1,e:19},
+    {n:20, t:'Compañero',               d:'Itadori y sus aliados se preparan para el siguiente gran conflicto. Una nueva era de oscuridad se avecina.',          dur:'24min',s:1,e:20},
+  ],
+  1429: [ // Attack on Titan S1
+    {n:1,  t:'A ti, en el año 850',     d:'Eren, Mikasa y Armin viven dentro de los muros. Una mañana, el Titán Colosal aparece y todo cambia.',                 dur:'24min',s:1,e:1},
+    {n:2,  t:'Ese Día',                 d:'Los Titanes invaden la ciudad. Eren pierde algo que no puede recuperar y jura exterminarlos a todos.',                dur:'24min',s:1,e:2},
+    {n:3,  t:'Resolución',              d:'Cinco años después. Eren, Mikasa y Armin se gradúan y se preparan para su primer día como soldados.',                 dur:'24min',s:1,e:3},
+    {n:4,  t:'Primera Batalla',         d:'Los reclutas son enviados a defender Trost. El primer contacto real con los Titanes es devastador.',                  dur:'24min',s:1,e:4},
+    {n:5,  t:'Pérdidas Inadmisibles',   d:'Trost cae en el caos. Eren descubre algo sobre sí mismo que desafía todo lo que creía saber.',                       dur:'24min',s:1,e:5},
+    {n:6,  t:'El Día en que Cayó',      d:'Eren despierta con un poder incomprensible. Sus compañeros no saben si considerarlo amigo o enemigo.',               dur:'24min',s:1,e:6},
+    {n:7,  t:'Un Pequeño Cuchillo',     d:'Eren es capturado por sus propios camaradas. Su juicio decidirá si es una herramienta o una amenaza.',               dur:'24min',s:1,e:7},
+    {n:8,  t:'¿Yo Puedo Hacer Eso?',    d:'El Capitán Levi defiende a Eren ante el tribunal militar. El plan para recuperar Trost toma forma.',                 dur:'24min',s:1,e:8},
+    {n:9,  t:'Yo No Puedo Oírlo',       d:'La Operación para tapar el agujero de Trost comienza. El peso del destino recae sobre Eren.',                        dur:'24min',s:1,e:9},
+    {n:10, t:'¿Respuesta?',             d:'Eren lucha por transformarse bajo presión extrema. El tiempo se acaba y Trost depende de él.',                       dur:'24min',s:1,e:10},
+    {n:11, t:'Deseos Perdidos',         d:'La misión de Trost concluye. El escuadrón de Levi y Eren preparan la siguiente fase del plan.',                      dur:'24min',s:1,e:11},
+    {n:12, t:'Disparidad',              d:'El Regimiento de Reconocimiento parte más allá de los muros. La Primera Expedición muestra sus crueles reglas.',     dur:'24min',s:1,e:12},
+    {n:13, t:'Vasija',                  d:'La expedición avanza. El sistema de señales de Erwin es puesto a prueba mientras los Titanes rodean al grupo.',      dur:'24min',s:1,e:13},
+    {n:14, t:'El Día en Que los Titanes Aparecieron por Primera Vez', d:'El Titán Femenino aparece. Armin reconoce inteligencia humana detrás de sus ojos.',   dur:'24min',s:1,e:14},
+    {n:15, t:'Un Mal Día',              d:'El Titán Femenino captura a Eren. Levi y Mikasa deben decidir si rescatarlo o retroceder.',                         dur:'24min',s:1,e:15},
+    {n:16, t:'¿Lo que Se Debe Proteger?', d:'Eren es rescatado pero la expedición termina en tragedia. Erwin regresa con casi nada que mostrar.',               dur:'24min',s:1,e:16},
+    {n:17, t:'El Titán Femenino',       d:'El Regimiento de Reconocimiento sospecha que el Titán Femenino está entre sus filas.',                              dur:'24min',s:1,e:17},
+    {n:18, t:'Trampa para Ratones',     d:'Levi y Erwin tienden una trampa para atrapar al enemigo infiltrado dentro de los muros.',                           dur:'24min',s:1,e:18},
+    {n:19, t:'Otra Persona',            d:'La identidad del Titán Femenino es revelada. Eren debe tomar la decisión más difícil de su vida.',                   dur:'24min',s:1,e:19},
+    {n:20, t:'La Esperanza de la Humanidad', d:'Eren y el Titán Femenino combaten en el bosque. Levi interviene en un momento decisivo.',                      dur:'24min',s:1,e:20},
+    {n:21, t:'Seguir Luchando',         d:'El Titán Femenino es capturado. El interrogatorio revela secretos que sacuden los cimientos del mundo.',             dur:'24min',s:1,e:21},
+    {n:22, t:'La Noche Previa a la Recuperación', d:'Los soldados se preparan para la operación de recuperar el Distrito Stohess.',                            dur:'24min',s:1,e:22},
+    {n:23, t:'Sinvergüenza',            d:'La operación en Stohess comienza. El Titán Femenino se libera causando una destrucción masiva.',                    dur:'24min',s:1,e:23},
+    {n:24, t:'Dos',                     d:'La batalla final entre Eren y el Titán Femenino llega a su conclusión. El muro guarda un último secreto.',           dur:'24min',s:1,e:24},
+    {n:25, t:'¿Hacia Dónde Va ese Paso?', d:'Final de temporada. Las consecuencias de la batalla se sienten mientras un nuevo misterio emerge.',               dur:'24min',s:1,e:25},
+  ],
+  37854: [ // One Piece Live Action S1
+    {n:1,  t:'Romance Dawn',            d:'Luffy escapa de East Blue y recluta a Zoro, un cazarrecompensas encadenado, como primer miembro de su tripulación.',   dur:'65min',s:1,e:1},
+    {n:2,  t:'La Chica del Mapa',       d:'Luffy conoce a Nami, una ladrona de mapas con un misterioso pasado ligado a los piratas de Arlong.',                  dur:'56min',s:1,e:2},
+    {n:3,  t:'¿A quién llamas "Doctor"?', d:'La tripulación llega a la isla de Syrup y conoce a Usopp. Se descubre una conspiración contra la familia Kaya.',   dur:'51min',s:1,e:3},
+    {n:4,  t:'Los Cocineros del Baratié', d:'En el restaurante flotante Baratié, Luffy recluta al cocinero Sanji mientras se defienden de Don Krieg.',           dur:'58min',s:1,e:4},
+    {n:5,  t:'Suyasuya',                d:'La verdad sobre el pasado de Nami y su aldea bajo el yugo de Arlong sale a la luz.',                                  dur:'55min',s:1,e:5},
+    {n:6,  t:'El Chef y el Servidor',   d:'La batalla contra Arlong Park comienza. Los Sombreros de Paja se enfrentan al más poderoso pirata de East Blue.',     dur:'59min',s:1,e:6},
+    {n:7,  t:'El Barco del Tesoro',     d:'La lucha contra Arlong concluye. La Marina persigue a Luffy mientras el capitán Smoker entra en escena.',             dur:'52min',s:1,e:7},
+    {n:8,  t:'El Fin del Comienzo',     d:'Los Sombreros de Paja celebran su victoria y parten hacia la Grand Line con nuevos sueños y peligros por delante.',   dur:'57min',s:1,e:8},
+  ],
+  114410: [ // Chainsaw Man S1
+    {n:1,  t:'Perro y Motosierra',      d:'Denji, un joven en deuda, caza demonios con su perro Pochita. Una traición lo lleva a fusionarse con él.',            dur:'24min',s:1,e:1},
+    {n:2,  t:'Sirena de Alarma de Incendios', d:'Denji se convierte en el Hombre Motosierra y es reclutado por la División Pública de Cazadores de Demonios.',  dur:'24min',s:1,e:2},
+    {n:3,  t:'¡Motosierra en el Matorral!', d:'Denji conoce a Power, una Demonio-Humano que quiere recuperar a su gato secuestrado.',                           dur:'24min',s:1,e:3},
+    {n:4,  t:'Los Cuatro Espadachines de Kishibe', d:'Denji y Power entrenan bajo el brutal tutelaje de Kishibe, el cazador más fuerte.',                       dur:'24min',s:1,e:4},
+    {n:5,  t:'Serpiente, Murciélago',   d:'Una misión de rescate revela nuevas amenazas. Los cazadores enfrentan a Demonios con poderes inesperados.',           dur:'24min',s:1,e:5},
+    {n:6,  t:'Nuevo Compañero',         d:'Aki presenta a su equipo. Las complicadas relaciones entre cazadores y demonios-humanos se hacen más evidentes.',     dur:'24min',s:1,e:6},
+    {n:7,  t:'La Asignación de Denji',  d:'Denji recibe su primera misión importante. El Demonio del Eternity atrapa a los cazadores en un hotel infinito.',    dur:'24min',s:1,e:7},
+    {n:8,  t:'Felicidad Instantánea',   d:'La batalla en el hotel continúa. Denji descubre que su fuerza tiene un límite: la sangre.',                          dur:'24min',s:1,e:8},
+    {n:9,  t:'Pez de Colores y Fuego',  d:'El arco del hotel concluye. Makima revela sus verdaderas intenciones sobre el futuro de Denji.',                     dur:'24min',s:1,e:9},
+    {n:10, t:'Gallina, Comida de Mar, Serpiente, Flor', d:'Asignaciones múltiples. Los cazadores enfrentan situaciones que ponen a prueba sus lealtades.',      dur:'24min',s:1,e:10},
+    {n:11, t:'Dios del Arma',           d:'Los orígenes del contrato entre Aki y el Demonio del Zorro son revelados. Una batalla a vida o muerte.',             dur:'24min',s:1,e:11},
+    {n:12, t:'Motosierra vs. Espadazo', d:'Final de temporada. Denji enfrenta una amenaza de nivel existencial. ¿Puede el Hombre Motosierra salvarse a sí mismo?', dur:'24min',s:1,e:12},
+  ],
+  120089: [ // Spy x Family S1
+    {n:1,  t:'Operación Strix',         d:'El espía conocido como Loid Forger recibe una misión que requiere crear una familia falsa en tiempo récord.',         dur:'24min',s:1,e:1},
+    {n:2,  t:'El Mundo Solo Necesita Paz', d:'Loid adopta a Anya, sin saber que puede leer mentes. Ella sabe todo sobre su misión secreta.',                    dur:'24min',s:1,e:2},
+    {n:3,  t:'El Día de la Entrevista', d:'La familia Forger se prepara para la crucial entrevista de admisión en el colegio Eden.',                            dur:'24min',s:1,e:3},
+    {n:4,  t:'El Primer Día de Clases', d:'Anya comienza en Eden. Las reglas del colegio son estrictas, pero ella está decidida a ganar puntos de honor.',      dur:'24min',s:1,e:4},
+    {n:5,  t:'¡Familia Forger a Trabajar!', d:'Loid busca una madre para Anya. Yor Briar, una asesina que necesita una cobertura, entra en escena.',            dur:'24min',s:1,e:5},
+    {n:6,  t:'La Asesina del Jardín',   d:'Loid y Yor acuerdan un matrimonio de conveniencia. Ninguno sabe los secretos del otro.',                             dur:'24min',s:1,e:6},
+    {n:7,  t:'El Hermano de la Asesina', d:'Yuri, el hermano de Yor y agente de la Policía Secreta, visita a la familia y sospecha del matrimonio.',            dur:'24min',s:1,e:7},
+    {n:8,  t:'El Día del Gran Circo',   d:'La familia va al circo. Una crisis real pone a prueba los instintos de protección de Loid como padre.',              dur:'24min',s:1,e:8},
+    {n:9,  t:'Elegir a un Amigo',       d:'Anya debe hacer amigos en el colegio para avanzar en la misión. Conoce al hijo del objetivo.',                       dur:'24min',s:1,e:9},
+    {n:10, t:'La Gran Mente de Anya',   d:'Anya elabora un plan para acercarse a Damian. Sus métodos son caóticos pero sorprendentemente efectivos.',           dur:'24min',s:1,e:10},
+    {n:11, t:'Stella',                  d:'Una oportunidad para ganar una Stella Star se presenta. Anya se lanza a una aventura heroica en el colegio.',        dur:'24min',s:1,e:11},
+    {n:12, t:'El Dominio del Espía',    d:'Loid enfrenta una misión paralela mientras mantiene su fachada familiar. Los mundos de espía y padre chocan.',       dur:'24min',s:1,e:12},
+    {n:13, t:'El Torneo de Tenis',      d:'La familia Forger participa en un torneo. Yor demuestra sus habilidades de una manera que nadie esperaba.',          dur:'24min',s:1,e:13},
+  ],
+  225180: [ // Blue Eye Samurai S1
+    {n:1,  t:'Hambre / Niebla / Polvo / Lluvia', d:'En el Japón del período Edo, una guerrera de ojos azules de origen mestizo busca al hombre que arruinó su vida.', dur:'56min',s:1,e:1},
+    {n:2,  t:'Un Trabajo Sucio',        d:'Mizu acepta una misión de escolta que la lleva más cerca de su objetivo mientras oculta su verdadera identidad.',    dur:'39min',s:1,e:2},
+    {n:3,  t:'Batallas Pasadas',        d:'El pasado de Mizu es revelado a través de flashbacks. La crueldad que formó a la guerrera que es hoy.',              dur:'52min',s:1,e:3},
+    {n:4,  t:'Las Cuatro Hojas',        d:'Mizu descubre información crucial sobre los cuatro hombres blancos que pudieron ser su padre.',                      dur:'46min',s:1,e:4},
+    {n:5,  t:'El Espejo o la Espada',   d:'Confrontaciones revelan verdades. Mizu debe elegir entre su misión de venganza y proteger a los inocentes.',         dur:'44min',s:1,e:5},
+    {n:6,  t:'Todo lo Azul',            d:'La identidad de Mizu está en peligro. Una batalla en el agua pone a prueba todos sus límites.',                     dur:'52min',s:1,e:6},
+    {n:7,  t:'Pecados de los Padres',   d:'Mizu se acerca al objetivo final. Los secretos sobre su origen se vuelven más oscuros de lo imaginado.',             dur:'55min',s:1,e:7},
+    {n:8,  t:'El Azul Eléctrico',       d:'Final de temporada. La confrontación definitiva. Mizu enfrenta las consecuencias de su camino de venganza.',         dur:'65min',s:1,e:8},
+  ],
+  88803: [ // Vinland Saga S2
+    {n:1,  t:'Esclavo',                 d:'Thorfinn, sin su sed de venganza, trabaja como esclavo en una granja en Dinamarca, vacío por dentro.',               dur:'24min',s:1,e:1},
+    {n:2,  t:'El Camino hacia el Paraíso', d:'Einar llega a la granja como nuevo esclavo. Su espíritu indomable contrasta con el de Thorfinn.',                dur:'24min',s:1,e:2},
+    {n:3,  t:'Tierra Virgen',           d:'Thorfinn y Einar reciben la tarea de despejar tierra virgen con la promesa de ganar su libertad.',                   dur:'24min',s:1,e:3},
+    {n:4,  t:'El Señor del Dominio',    d:'El brutal dueño de la granja muestra su verdadera naturaleza. La vida de los esclavos pende de un hilo.',            dur:'24min',s:1,e:4},
+    {n:5,  t:'Palabras de Guerra',      d:'Tensiones políticas amenazan la granja. Thorfinn comienza a recordar las enseñanzas de su padre Thors.',             dur:'24min',s:1,e:5},
+    {n:6,  t:'Sobre la Violencia',      d:'Un incidente brutal lleva a Thorfinn a confrontar el ciclo de violencia en el que ha vivido toda su vida.',          dur:'24min',s:1,e:6},
+    {n:7,  t:'El Guerrero sin Armas',   d:'Thorfinn toma una decisión radical sobre la violencia. Su nueva filosofía es puesta a prueba de inmediato.',         dur:'24min',s:1,e:7},
+    {n:8,  t:'El Granjero',             d:'La vida cotidiana en la granja. Thorfinn y Einar cultivan algo más que tierra: una amistad genuina.',                dur:'24min',s:1,e:8},
+    {n:9,  t:'Yugo',                    d:'Retlaw aprieta su control sobre los esclavos. Thorfinn y Einar deben decidir cuánto pueden soportar.',               dur:'24min',s:1,e:9},
+    {n:10, t:'El Sueño de Thorfinn',    d:'Thorfinn tiene una visión que lo reconecta con su propósito. El camino hacia Vinland comienza a tomar forma.',       dur:'24min',s:1,e:10},
+    {n:11, t:'El Camino del Guerrero',  d:'Una crisis en la granja. Thorfinn debe actuar sin abandonar su nuevo juramento de no violencia.',                   dur:'24min',s:1,e:11},
+    {n:12, t:'El Pueblo de los Esclavos', d:'La lucha por la libertad se intensifica. Alianzas inesperadas se forman entre los esclavos.',                      dur:'24min',s:1,e:12},
+    {n:13, t:'El Precio de la Libertad', d:'Las consecuencias de las decisiones de Thorfinn afectan a todos en la granja.',                                    dur:'24min',s:1,e:13},
+    {n:14, t:'En el Fondo del Abismo',  d:'Todo parece perdido. Thorfinn enfrenta el momento más oscuro desde que dejó de ser guerrero.',                      dur:'24min',s:1,e:14},
+    {n:15, t:'Por Aquellos que Caen',   d:'La verdadera fortaleza de Thorfinn es puesta a prueba. ¿Puede un hombre cambiar realmente?',                       dur:'24min',s:1,e:15},
+    {n:16, t:'El Hombre Libre',         d:'Un nuevo capítulo comienza. Thorfinn da el primer paso hacia Vinland, hacia la tierra sin guerra.',                 dur:'24min',s:1,e:16},
+    {n:17, t:'El Fin del Viaje',        d:'Preparativos para la gran travesía. Thorfinn reúne aliados para su sueño de construir una sociedad pacífica.',      dur:'24min',s:1,e:17},
+    {n:18, t:'Aurora Boreal',           d:'Final de temporada. El horizonte se abre. Thorfinn navega hacia el futuro con esperanza por primera vez en su vida.', dur:'24min',s:1,e:18},
+  ],
 };
 
 function getEpisodes(id) {
@@ -1434,8 +1667,10 @@ function fadeVolumeOut(player, durationMs) {
     try { player.setVolume(Math.round(current)); } catch(e) {}
   }, interval);
 }
-function buildTrailerURL(key, muted) {
-  return `https://www.youtube.com/embed/${key}?autoplay=1&mute=${muted?1:0}&controls=0&loop=1&playlist=${key}&modestbranding=1&showinfo=0&rel=0&iv_load_policy=3&disablekb=1&enablejsapi=1`;
+// Siempre arranca muteado — el fade-in lo maneja YT.Player onReady
+// Así nunca hay el destello de volumen normal al inicio
+function buildTrailerURL(key) {
+  return `https://www.youtube.com/embed/${key}?autoplay=1&mute=1&controls=0&loop=1&playlist=${key}&modestbranding=1&showinfo=0&rel=0&iv_load_policy=3&disablekb=1&enablejsapi=1`;
 }
 
 function trackCard() {
@@ -1461,7 +1696,7 @@ function startTrailer(key) {
   const playerId = 'yt-card-' + Date.now();
   const iframeEl = document.createElement('iframe');
   iframeEl.id    = playerId;
-  iframeEl.src   = buildTrailerURL(key, isMuted);
+  iframeEl.src   = buildTrailerURL(key);  // siempre mute=1
   iframeEl.allow = 'autoplay; encrypted-media';
   iframeEl.style.cssText = 'opacity:0; transition:opacity 1.5s ease;';
   const muteBtn = document.createElement('button');
@@ -1494,7 +1729,17 @@ function startTrailer(key) {
     if (ytApiReady) {
       try {
         new YT.Player(playerId, {
-          events: { onReady: (e) => { ytPlayers[playerId] = e.target; if (!isMuted) { e.target.setVolume(0); fadeVolumeIn(e.target, 80, 2500); } } }
+          events: {
+            onReady: (e) => {
+              ytPlayers[playerId] = e.target;
+              if (!isMuted) {
+                // Ya arrancó muteado — desmutear y fade desde 0
+                e.target.unMute();
+                e.target.setVolume(0);
+                fadeVolumeIn(e.target, 80, 2500);
+              }
+            }
+          }
         });
       } catch(err) {}
     }
@@ -1654,7 +1899,7 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
   if(key){
     modalTrailerDelay = setTimeout(() => {
       const modalPlayerId = 'yt-modal-' + Date.now();
-      const url = `https://www.youtube.com/embed/${key}?autoplay=1&mute=${modalMuted?1:0}&controls=0&loop=1&playlist=${key}&modestbranding=1&showinfo=0&rel=0&iv_load_policy=3&disablekb=1&enablejsapi=1`;
+      const url = buildTrailerURL(key); // siempre mute=1
       const iframeWrap = document.getElementById('modal-iframe-wrap');
       const iframe = document.createElement('iframe');
       iframe.id    = modalPlayerId;
@@ -1669,7 +1914,12 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
         document.getElementById('modal-mute').classList.add('visible');
         if (ytApiReady && !modalMuted) {
           try {
-            new YT.Player(modalPlayerId, { events: { onReady: (e) => { ytPlayers[modalPlayerId] = e.target; e.target.setVolume(0); fadeVolumeIn(e.target, 70, 3000); } } });
+            new YT.Player(modalPlayerId, { events: { onReady: (e) => {
+              ytPlayers[modalPlayerId] = e.target;
+              e.target.unMute();
+              e.target.setVolume(0);
+              fadeVolumeIn(e.target, 70, 3000);
+            }}});
           } catch(err) {}
         }
       }, 1500);
@@ -1856,7 +2106,7 @@ function openMovieModal(tmdbId, title, imgPath, genre, match, year) {
   if(trailerKey){
     mmTrailerDelay = setTimeout(() => {
       const pid = 'yt-mm-' + Date.now();
-      const url = `https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=${mmMuted?1:0}&controls=0&loop=1&playlist=${trailerKey}&modestbranding=1&showinfo=0&rel=0&iv_load_policy=3&disablekb=1&enablejsapi=1`;
+      const url = buildTrailerURL(trailerKey); // siempre mute=1
       const wrap = document.getElementById('mm-iframe-wrap');
       const iframe = document.createElement('iframe');
       iframe.id = pid; iframe.src = url; iframe.allow = 'autoplay; encrypted-media';
@@ -1869,7 +2119,12 @@ function openMovieModal(tmdbId, title, imgPath, genre, match, year) {
         document.getElementById('mm-mute').classList.add('visible');
         if(ytApiReady && !mmMuted){
           try {
-            new YT.Player(pid, { events: { onReady: e => { ytPlayers[pid] = e.target; e.target.setVolume(0); fadeVolumeIn(e.target, 70, 3000); } } });
+            new YT.Player(pid, { events: { onReady: e => {
+              ytPlayers[pid] = e.target;
+              e.target.unMute();
+              e.target.setVolume(0);
+              fadeVolumeIn(e.target, 70, 3000);
+            }}});
           } catch(err) {}
         }
       }, 1500);
