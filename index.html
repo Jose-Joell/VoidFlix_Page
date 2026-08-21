@@ -672,6 +672,7 @@ button { cursor:pointer; font-family:'Barlow',sans-serif; }
 
 /* Episodio — botón play integrado */
 .ep-item { display:flex; gap:14px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,.04); align-items:center; transition:all .15s; border-radius:4px; }
+.ep-loading { padding:24px 14px; text-align:center; color:var(--muted); font-size:.85rem; }
 .ep-item:hover { background:rgba(29,185,84,.04); padding-left:8px; padding-right:8px; }
 .ep-num { font-family:'Rajdhani',sans-serif; font-size:1.4rem; font-weight:700; color:var(--dim); width:24px; text-align:center; flex:none; }
 .ep-thumb { width:100px; height:56px; flex:none; border-radius:3px; overflow:hidden; border:1px solid rgba(29,185,84,.1); position:relative; cursor:pointer; }
@@ -1394,6 +1395,65 @@ function flattenCatalog() {
   return DATA;
 }
 const DATA = flattenCatalog();
+DATA.dynamic = []; // ítems agregados en tiempo real desde el buscador (fuera del catálogo predeterminado)
+
+// ═══════════════════════════════════════════════════════════
+//  ENRIQUECIMIENTO AUTOMÁTICO DESDE TMDB
+//  Para cualquier título que el usuario encuentre por búsqueda
+//  y no esté en el catálogo predeterminado: trae imagen, logo,
+//  tráiler, géneros, sinopsis y duración/temporadas — todo en
+//  UNA sola petición combinada (append_to_response) por eficiencia.
+// ═══════════════════════════════════════════════════════════
+async function registerDynamicItem(id, type) {
+  const existing = findItemInData(id);
+  if (existing) return existing; // ya está en el catálogo o ya se registró antes
+
+  try {
+    const appendKey = type === 'movie' ? 'images,videos,release_dates' : 'images,videos,content_ratings';
+    const res  = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}&language=es-MX&include_image_language=en,null&append_to_response=${appendKey}`);
+    const data = await res.json();
+    if (data.success === false) throw new Error(data.status_message || 'No encontrado en TMDB');
+
+    const backdropPath = data.images?.backdrops?.[0]?.file_path || data.backdrop_path || null;
+    const logos  = data.images?.logos || [];
+    const enLogo = logos.find(l => l.iso_639_1 === 'en' && l.file_path.endsWith('.png'))
+                || logos.find(l => l.file_path.endsWith('.png'))
+                || logos[0] || null;
+    const videos  = data.videos?.results || [];
+    const trailer = videos.find(v => v.site === 'YouTube' && v.type === 'Trailer' && v.official)
+                 || videos.find(v => v.site === 'YouTube' && v.type === 'Trailer')
+                 || videos.find(v => v.site === 'YouTube') || null;
+
+    const item = {
+      id, type,
+      t: data.title || data.name || 'Sin título',
+      img:  backdropPath ? TMDB_IMG + backdropPath : null,
+      logo: enLogo ? `https://image.tmdb.org/t/p/w300${enLogo.file_path}` : null,
+      trailer: trailer ? trailer.key : null,
+      g: (data.genres || []).map(g => g.name).join(' · '),
+      m: data.vote_average ? `${Math.round(data.vote_average * 10)}%` : '',
+      y: (data.release_date || data.first_air_date || '').slice(0, 4),
+      noLogo: !enLogo,
+    };
+
+    DATA.dynamic.push(item);
+    mediaCache[id] = { img: item.img, logo: item.logo, trailer: item.trailer };
+
+    if (type === 'movie') {
+      const dur = data.runtime ? `${Math.floor(data.runtime / 60)}h ${data.runtime % 60}min` : '';
+      const usCert = (data.release_dates?.results || []).find(r => r.iso_3166_1 === 'US');
+      const rating = usCert?.release_dates?.find(d => d.certification)?.certification || '';
+      MOVIE_EXTRA[id] = { dur, rating, desc: data.overview || 'Sin sinopsis disponible.' };
+    } else {
+      SERIES_DESC[id] = data.overview || 'Sin sinopsis disponible.';
+      item.seasons = data.number_of_seasons || 1;
+    }
+    return item;
+  } catch (err) {
+    console.error('[VOIDFLIX] Error obteniendo datos de TMDB para id ' + id + ':', err);
+    return null;
+  }
+}
 
 async function resolveAllBackdrops() {
   const allItems = Object.values(CATALOG).flat();
@@ -1649,6 +1709,30 @@ const EPISODES_BY_SHOW = {
 
 function getEpisodes(id) {
   return EPISODES_BY_SHOW[id] || EPISODES_BY_SHOW.default;
+}
+
+// Para series sin episodios curados a mano: trae la temporada real desde TMDB
+let modalEpisodesToken = 0;
+const SEASON_CACHE = {};
+async function fetchSeasonEpisodes(id, season = 1) {
+  const key = id + '-' + season;
+  if (SEASON_CACHE[key]) return SEASON_CACHE[key];
+  try {
+    const res  = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${season}?api_key=${TMDB_KEY}&language=es-MX`);
+    const data = await res.json();
+    const episodes = (data.episodes || []).map(ep => ({
+      n: ep.episode_number,
+      t: ep.name || `Episodio ${ep.episode_number}`,
+      d: ep.overview || 'Sin descripción disponible.',
+      dur: ep.runtime ? `${ep.runtime}min` : '',
+      s: season, e: ep.episode_number,
+    }));
+    SEASON_CACHE[key] = episodes;
+    return episodes;
+  } catch (err) {
+    console.error('[VOIDFLIX] Error obteniendo episodios de TMDB para id ' + id + ':', err);
+    return [];
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1976,6 +2060,7 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
     const found = arr.find(d => d.t === title);
     if(found){ const cached = mediaCache[found.id]; if(cached && cached.logo && !found.noLogo) foundLogo = cached.logo; break; }
   }
+  if(!foundLogo && tmdbId && mediaCache[tmdbId] && mediaCache[tmdbId].logo) foundLogo = mediaCache[tmdbId].logo;
   if(foundLogo){ modalLogoEl.src = foundLogo; modalLogoEl.alt = title; modalLogoEl.style.display = 'block'; modalTitleEl.style.display = 'none'; }
   else { modalLogoEl.style.display = 'none'; modalTitleEl.style.display = 'block'; }
 
@@ -2037,9 +2122,12 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
   };
   if (window.voidflixSetListButtonState) window.voidflixSetListButtonState('modal-list-btn-label', resolvedId);
 
-  // Episodios
-  const episodes = getEpisodes(resolvedId);
-  document.getElementById('modal-ep-list').innerHTML = episodes.map(ep => `
+  // Episodios: usa datos curados si existen; si no, trae la temporada real de TMDB
+  const epListEl = document.getElementById('modal-ep-list');
+  const epRequestToken = ++modalEpisodesToken; // evita pisar el modal si el usuario abre otro antes de que termine de cargar
+
+  function buildEpisodeHTML(ep) {
+    return `
     <div class="ep-item">
       <div class="ep-num">${ep.n}</div>
       <div class="ep-thumb" onclick="closeModal(()=>openPlayer(${resolvedId},'tv','${title.replace(/'/g,"\\'")}','T${ep.s} · E${ep.e} — ${ep.t.replace(/'/g,"\\'")}',${ep.s},${ep.e}))">
@@ -2057,7 +2145,27 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
       <button class="ep-play-btn" onclick="closeModal(()=>openPlayer(${resolvedId},'tv','${title.replace(/'/g,"\\'")}','T${ep.s} · E${ep.e} — ${ep.t.replace(/'/g,"\\'")}',${ep.s},${ep.e}))" title="Reproducir episodio ${ep.n}">
         <svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
       </button>
-    </div>`).join('');
+    </div>`;
+  }
+  function renderEpisodes(episodes) {
+    if (epRequestToken !== modalEpisodesToken) return; // el usuario ya abrió otro modal mientras cargaba
+    epListEl.innerHTML = episodes.map(buildEpisodeHTML).join('');
+  }
+
+  if (EPISODES_BY_SHOW[resolvedId]) {
+    renderEpisodes(EPISODES_BY_SHOW[resolvedId]);
+  } else {
+    epListEl.innerHTML = `<div class="ep-loading">Cargando episodios reales…</div>`;
+    fetchSeasonEpisodes(resolvedId, 1).then(episodes => {
+      renderEpisodes(episodes.length ? episodes : EPISODES_BY_SHOW.default);
+    });
+  }
+
+  // Temporadas reales si el ítem vino del buscador
+  const dynMeta = DATA.dynamic.find(d => d.id === resolvedId);
+  if (dynMeta && dynMeta.seasons) {
+    document.getElementById('modal-dur-text').textContent = dynMeta.seasons + (dynMeta.seasons === 1 ? ' Temporada' : ' Temporadas');
+  }
 
   const seriesOverlay = document.getElementById('modal');
   seriesOverlay.style.display = 'flex';
@@ -2388,11 +2496,13 @@ async function liveSearch(query) {
 async function openFromSearch(id, type, title) {
   document.getElementById('searchInput').value = '';
   document.getElementById('search-results').classList.remove('visible');
-  const media = await fetchMedia(id, type);
+  showToast('🔎 Cargando ' + title + '…');
+  const item = await registerDynamicItem(id, type);
+  if (!item) { showToast('No se pudo cargar ese contenido, intenta de nuevo'); return; }
   if (type === 'movie') {
-    openMovieModal(id, title, media.img, 'Película', '', '');
+    openMovieModal(item.id, item.t, item.img, item.g, item.m, item.y);
   } else {
-    openModal(title, media.img, 'Serie', '', '', id, type);
+    openModal(item.t, item.img, item.g, item.m, item.y, item.id, item.type);
   }
 }
 document.getElementById('searchInput').addEventListener('input', e => { clearTimeout(searchDebounce); searchDebounce = setTimeout(() => liveSearch(e.target.value.trim()), 350); });
