@@ -141,6 +141,28 @@ button { cursor:pointer; font-family:'Barlow',sans-serif; }
 .google-btn:disabled { opacity:.6; cursor:default; transform:none; box-shadow:0 4px 20px rgba(0,0,0,.5); }
 .login-note { margin-top:22px; font-size:.72rem; color:var(--dim); line-height:1.5; }
 .login-error { margin-top:14px; font-size:.78rem; color:#ff6b6b; min-height:1em; }
+
+/* ─────────── MODAL MI LISTA ─────────── */
+#mylist-modal-overlay {
+  position:fixed; inset:0; z-index:9998; background:rgba(0,0,0,.8);
+  display:none; align-items:flex-start; justify-content:center;
+  padding:60px 20px; overflow-y:auto; opacity:0; transition:opacity .25s ease;
+}
+#mylist-modal-overlay.open { opacity:1; }
+#mylist-modal {
+  width:100%; max-width:960px; background:var(--bg2, #0c1710); border-radius:12px;
+  border:1px solid rgba(255,255,255,.08); box-shadow:0 20px 60px rgba(0,0,0,.6);
+  transform:translateY(24px); transition:transform .25s ease;
+}
+#mylist-modal-overlay.open #mylist-modal { transform:translateY(0); }
+.mylist-head { display:flex; align-items:center; justify-content:space-between; padding:22px 28px; border-bottom:1px solid rgba(255,255,255,.08); }
+.mylist-head h2 { font-family:'Rajdhani',sans-serif; font-size:1.5rem; letter-spacing:1px; color:#fff; }
+.mylist-close { background:none; border:none; color:rgba(255,255,255,.6); font-size:1.2rem; cursor:pointer; padding:6px; line-height:1; }
+.mylist-close:hover { color:#fff; }
+.mylist-body { padding:24px 28px 32px; min-height:120px; }
+.mylist-empty { text-align:center; color:var(--muted); font-size:.9rem; line-height:1.6; padding:40px 20px; }
+.mylist-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:14px; }
+.mylist-grid .card { aspect-ratio:2/3; width:100%; }
 .dd-profiles { padding:12px 0 8px; border-bottom:1px solid rgba(255,255,255,.07); }
 .dd-profiles-label { font-size:.62rem; letter-spacing:2px; color:rgba(255,255,255,.35); text-transform:uppercase; padding:0 16px; margin-bottom:8px; }
 .dd-profile-row { display:flex; gap:12px; align-items:center; padding:7px 16px; cursor:pointer; transition:background .15s; }
@@ -740,7 +762,7 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
       <a href="#">Series</a>
       <a href="#">Películas</a>
       <a href="#">Novedades</a>
-      <a href="#row-favorites-wrap" onclick="event.preventDefault(); document.getElementById('row-favorites-wrap').scrollIntoView({behavior:'smooth'});">Mi Lista</a>
+      <a href="#" onclick="event.preventDefault(); window.voidflixOpenMyList && window.voidflixOpenMyList();">Mi Lista</a>
       <a href="#">Explorar</a>
     </div>
   </div>
@@ -790,11 +812,7 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
           </div>
         </div>
         <div class="dd-links">
-          <div class="dd-link" onclick="showToast('👤 Administrar perfiles')"><span class="dd-link-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>Administrar perfiles</div>
-          <div class="dd-link" onclick="showToast('⚡ Actividad de cuenta')"><span class="dd-link-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>Actividad de cuenta</div>
-          <div class="dd-sep"></div>
-          <div class="dd-link" onclick="showToast('⚙️ Configuración')"><span class="dd-link-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>Configuración</div>
-          <div class="dd-link" onclick="showToast('❓ Centro de ayuda')"><span class="dd-link-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>Centro de ayuda</div>
+          <div class="dd-link" onclick="window.voidflixOpenMyList && window.voidflixOpenMyList()"><span class="dd-link-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>Mi Lista</div>
         </div>
         <div class="dd-signout" onclick="voidflixSignOut()">Cerrar sesión en VOIDFLIX</div>
       </div>
@@ -869,22 +887,6 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
     <div class="row-scroll-wrap">
       <button class="arrow-btn arrow-left" onclick="scrollRow(this,-1)">‹</button>
       <div class="row-scroll" id="row-continue"></div>
-      <button class="arrow-btn arrow-right" onclick="scrollRow(this,1)">›</button>
-    </div>
-  </div>
-  <div class="row" id="row-favorites-wrap" style="display:none">
-    <div class="row-title-wrap"><span class="row-title">❤️ Mi Lista</span></div>
-    <div class="row-scroll-wrap">
-      <button class="arrow-btn arrow-left" onclick="scrollRow(this,-1)">‹</button>
-      <div class="row-scroll" id="row-favorites"></div>
-      <button class="arrow-btn arrow-right" onclick="scrollRow(this,1)">›</button>
-    </div>
-  </div>
-  <div class="row" id="row-watchlist-wrap" style="display:none">
-    <div class="row-title-wrap"><span class="row-title">🕒 Pendientes por ver</span></div>
-    <div class="row-scroll-wrap">
-      <button class="arrow-btn arrow-left" onclick="scrollRow(this,-1)">‹</button>
-      <div class="row-scroll" id="row-watchlist"></div>
       <button class="arrow-btn arrow-right" onclick="scrollRow(this,1)">›</button>
     </div>
   </div>
@@ -974,6 +976,22 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
         </button>
       </div>
       <div class="mm-genre">Géneros: <span id="mm-genre"></span></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MI LISTA -->
+<div id="mylist-modal-overlay" onclick="closeMyListModalOutside(event)">
+  <div id="mylist-modal">
+    <div class="mylist-head">
+      <h2>Mi Lista</h2>
+      <button class="mylist-close" onclick="closeMyListModal()">✕</button>
+    </div>
+    <div class="mylist-body" id="mylist-body">
+      <div class="mylist-empty" id="mylist-empty">
+        Todavía no has agregado nada.<br>Usa el botón "+" o "Mi Lista" en cualquier película o serie.
+      </div>
+      <div class="mylist-grid" id="mylist-grid"></div>
     </div>
   </div>
 </div>
@@ -1251,6 +1269,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (document.getElementById('player-overlay').classList.contains('open')) {
       closePlayer();
+    } else if (document.getElementById('mylist-modal-overlay').classList.contains('open')) {
+      closeMyListModal();
     } else if (document.getElementById('movie-modal-overlay').classList.contains('open')) {
       closeMovieModal();
     } else {
@@ -2271,6 +2291,46 @@ function closeMovieModalOutside(e){ if(e.target === document.getElementById('mov
 // ═══════════════════════════════════════════════════════════
 function scrollRow(btn,dir){ btn.closest('.row-scroll-wrap').querySelector('.row-scroll').scrollBy({left:dir*560,behavior:'smooth'}); }
 
+// ─── MODAL MI LISTA ───
+function toMyListCardItem(libItem){
+  return { id: isNaN(Number(libItem.id)) ? libItem.id : Number(libItem.id),
+    t: libItem.t, img: libItem.img, g: libItem.g, m: libItem.m || '—', y: libItem.y, type: libItem.type };
+}
+function renderMyListModal(){
+  const lib = window.voidflixLibrary || {};
+  const items = Object.values(lib)
+    .filter(i => i.isFavorite || i.isWatchlist)
+    .sort((a,b) => Math.max(b.favAt||0, b.watchAt||0) - Math.max(a.favAt||0, a.watchAt||0));
+  const grid  = document.getElementById('mylist-grid');
+  const empty = document.getElementById('mylist-empty');
+  if (items.length){
+    grid.style.display = 'grid';
+    empty.style.display = 'none';
+    grid.innerHTML = items.map(i => cardStd(toMyListCardItem(i))).join('');
+  } else {
+    grid.style.display = 'none';
+    empty.style.display = 'block';
+  }
+}
+function openMyListModal(){
+  renderMyListModal();
+  const overlay = document.getElementById('mylist-modal-overlay');
+  overlay.style.display = 'flex';
+  requestAnimationFrame(() => requestAnimationFrame(() => overlay.classList.add('open')));
+  document.body.style.overflow = 'hidden';
+  document.querySelector('.av-wrap')?.classList.remove('open');
+}
+function closeMyListModal(){
+  const overlay = document.getElementById('mylist-modal-overlay');
+  overlay.classList.remove('open');
+  setTimeout(() => { overlay.style.display = ''; document.body.style.overflow = ''; }, 250);
+}
+function closeMyListModalOutside(e){ if (e.target === document.getElementById('mylist-modal-overlay')) closeMyListModal(); }
+window.voidflixOpenMyList = openMyListModal;
+window.voidflixRenderMyListIfOpen = function(){
+  if (document.getElementById('mylist-modal-overlay').classList.contains('open')) renderMyListModal();
+};
+
 function selectProfile(row) {
   document.querySelectorAll('.dd-profile-row').forEach(r => { r.classList.remove('active-profile'); const b = r.querySelector('.dd-badge'); if(b) b.remove(); });
   row.classList.add('active-profile');
@@ -2558,41 +2618,24 @@ resolveAllBackdrops().then(() => initHero());
 
   function renderUserRows() {
     const all = Object.values(window.voidflixLibrary);
-    const favItems    = all.filter(i => i.isFavorite).sort((a,b) => (b.favAt||0)   - (a.favAt||0));
-    const watchItems  = all.filter(i => i.isWatchlist).sort((a,b) => (b.watchAt||0) - (a.watchAt||0));
     const recentItems = all.filter(i => i.lastViewedAt).sort((a,b) => (b.lastViewedAt||0) - (a.lastViewedAt||0));
-
-    const favWrap   = document.getElementById('row-favorites-wrap');
-    const watchWrap = document.getElementById('row-watchlist-wrap');
-
-    if (favItems.length) {
-      document.getElementById('row-favorites').innerHTML = favItems.map(i => cardStd(toCardItem(i))).join('');
-      favWrap.style.display = '';
-    } else {
-      favWrap.style.display = 'none';
-    }
-
-    if (watchItems.length) {
-      document.getElementById('row-watchlist').innerHTML = watchItems.map(i => cardStd(toCardItem(i))).join('');
-      watchWrap.style.display = '';
-    } else {
-      watchWrap.style.display = 'none';
-    }
 
     // Si hay historial real, reemplaza la fila demo de "Continuar viendo"
     if (recentItems.length) {
       document.getElementById('row-continue').innerHTML = recentItems.slice(0, 20)
         .map(i => cardContinue({ ...toCardItem(i), p: i.progress || 8 })).join('');
     }
+
+    // Refresca el modal "Mi Lista" si está abierto en este momento
+    window.voidflixRenderMyListIfOpen?.();
   }
 
   function resetUserRows() {
     window.voidflixLibrary = {};
-    document.getElementById('row-favorites-wrap').style.display = 'none';
-    document.getElementById('row-watchlist-wrap').style.display = 'none';
     if (typeof DATA !== 'undefined' && typeof cardContinue === 'function') {
       document.getElementById('row-continue').innerHTML = DATA.continue.map(c => cardContinue(c)).join('');
     }
+    window.voidflixRenderMyListIfOpen?.();
   }
 
   function subscribeLibrary(uid) {
@@ -2635,14 +2678,18 @@ resolveAllBackdrops().then(() => initHero());
   };
 
   window.voidflixLogView = async function (rawItem) {
-    if (!auth.currentUser) return; // sin sesión, no se guarda historial
+    if (!auth.currentUser) { console.warn('[VOIDFLIX] No hay sesión, no se registra en Continuar viendo'); return; }
     const uid  = auth.currentUser.uid;
     const item = normalizeItem(rawItem);
+    if (!item.id && item.id !== 0) { console.warn('[VOIDFLIX] Ítem sin id válido, no se registra:', rawItem); return; }
     try {
       await setDoc(libraryDocRef(uid, item.id), {
         ...item, lastViewedAt: Date.now(), progress: 8
       }, { merge: true });
-    } catch (err) { console.error(err); }
+      console.log('[VOIDFLIX] Registrado en Continuar viendo:', item.t);
+    } catch (err) {
+      console.error('[VOIDFLIX] Error guardando en Continuar viendo:', err);
+    }
   };
 
   // Refresca el texto de los botones "Mi Lista" abiertos actualmente (modales)
