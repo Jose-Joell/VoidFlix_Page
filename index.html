@@ -345,6 +345,15 @@ button { cursor:pointer; font-family:'Barlow',sans-serif; }
   transform: translateY(-100%);
   pointer-events: none;
 }
+/* Zona invisible que capta el tap/click sobre el iframe (los iframes de video no dejan pasar eventos al documento padre) */
+.player-tap-zone {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 90px;
+  z-index: 9;
+  background: transparent;
+  cursor: pointer;
+}
 .player-close {
   width: 40px; height: 40px;
   border-radius: 50%;
@@ -1060,6 +1069,9 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
     </div>
   </div>
 
+  <!-- Zona invisible: capta el toque en móviles, ya que el iframe del video absorbe los eventos y no llegan al documento padre -->
+  <div class="player-tap-zone" id="player-tap-zone"></div>
+
   <div class="player-loading" id="player-loading">
     <div class="player-spinner"></div>
     <div class="player-loading-text" id="player-loading-text">Conectando con servidor…</div>
@@ -1215,8 +1227,15 @@ function initTopbarAutoHide() {
   topbarInitialized = true;
   const overlay = document.getElementById('player-overlay');
   const bar = document.querySelector('.player-topbar');
+  const tapZone = document.getElementById('player-tap-zone');
   overlay.addEventListener('mousemove', showTopbar);
   overlay.addEventListener('touchstart', showTopbar, { passive: true });
+  // El iframe del reproductor no deja pasar eventos al documento padre,
+  // así que esta zona invisible es la única forma de detectar toques en móvil.
+  tapZone.addEventListener('click', () => {
+    if (bar.classList.contains('hidden')) { showTopbar(); }
+    else { clearTimeout(topbarHideTimer); bar.classList.add('hidden'); }
+  });
   bar.addEventListener('mouseenter', () => {
     clearTimeout(topbarHideTimer);
     bar.classList.remove('hidden');
