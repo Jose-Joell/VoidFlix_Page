@@ -740,7 +740,7 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
       <a href="#">Series</a>
       <a href="#">Películas</a>
       <a href="#">Novedades</a>
-      <a href="#">Mi Lista</a>
+      <a href="#row-favorites-wrap" onclick="event.preventDefault(); document.getElementById('row-favorites-wrap').scrollIntoView({behavior:'smooth'});">Mi Lista</a>
       <a href="#">Explorar</a>
     </div>
   </div>
@@ -872,6 +872,22 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
       <button class="arrow-btn arrow-right" onclick="scrollRow(this,1)">›</button>
     </div>
   </div>
+  <div class="row" id="row-favorites-wrap" style="display:none">
+    <div class="row-title-wrap"><span class="row-title">❤️ Mi Lista</span></div>
+    <div class="row-scroll-wrap">
+      <button class="arrow-btn arrow-left" onclick="scrollRow(this,-1)">‹</button>
+      <div class="row-scroll" id="row-favorites"></div>
+      <button class="arrow-btn arrow-right" onclick="scrollRow(this,1)">›</button>
+    </div>
+  </div>
+  <div class="row" id="row-watchlist-wrap" style="display:none">
+    <div class="row-title-wrap"><span class="row-title">🕒 Pendientes por ver</span></div>
+    <div class="row-scroll-wrap">
+      <button class="arrow-btn arrow-left" onclick="scrollRow(this,-1)">‹</button>
+      <div class="row-scroll" id="row-watchlist"></div>
+      <button class="arrow-btn arrow-right" onclick="scrollRow(this,1)">›</button>
+    </div>
+  </div>
   <div class="row top10">
     <div class="row-title-wrap"><span class="row-title">🔥 Top 10 en VOIDFLIX hoy</span><span class="row-explore">Ver ranking</span></div>
     <div class="row-scroll-wrap">
@@ -954,7 +970,7 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
           <svg width="16" height="16" viewBox="0 0 24 24" fill="#000"><polygon points="5,3 19,12 5,21"/></svg>Reproducir
         </button>
         <button class="btn-mylist" id="mm-list-btn" style="font-size:.85rem;padding:8px 18px">
-          <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" fill="none" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Mi Lista
+          <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" fill="none" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span id="mm-list-btn-label">Mi Lista</span>
         </button>
       </div>
       <div class="mm-genre">Géneros: <span id="mm-genre"></span></div>
@@ -991,8 +1007,8 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
         <button class="btn-play" id="modal-play-btn" style="font-size:.88rem;padding:8px 22px">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="#000"><polygon points="5,3 19,12 5,21"/></svg>Reproducir T1 E1
         </button>
-        <button class="btn-mylist" style="font-size:.85rem;padding:8px 18px" onclick="showToast('✅ Agregado a Mi Lista')">
-          <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" fill="none" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Mi Lista
+        <button class="btn-mylist" id="modal-list-btn" style="font-size:.85rem;padding:8px 18px">
+          <svg width="16" height="16" viewBox="0 0 24 24" stroke="var(--green)" fill="none" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span id="modal-list-btn-label">Mi Lista</span>
         </button>
       </div>
       <div class="modal-info-grid">
@@ -1193,6 +1209,15 @@ function initTopbarAutoHide() {
 
 function openPlayer(id, type, title, subtitle = '', season = 1, episode = 1) {
   playerState = { id, type, season, episode, title, subtitle, currentServer: 0 };
+
+  // Registrar en "Continuar viendo" (Firestore, solo si hay sesión iniciada)
+  if (window.voidflixLogView) {
+    const found = findItemInData(id);
+    window.voidflixLogView({
+      id, t: title, type,
+      img: found?.img || '', g: found?.g || '', m: found?.m || '', y: found?.y || ''
+    });
+  }
 
   document.getElementById('player-title').textContent    = title;
   document.getElementById('player-subtitle').textContent = subtitle;
@@ -1619,6 +1644,15 @@ function logoTag(logo, alt, noLogo){
   return `<div class="card-logo-wrap"><img src="${logo}" alt="${alt} logo" class="card-logo" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`;
 }
 
+// ─── Buscar datos completos de un ítem por ID (para favoritos/lista/historial) ───
+function findItemInData(id) {
+  for (const arr of Object.values(DATA)) {
+    const f = arr.find(d => d.id === id);
+    if (f) return f;
+  }
+  return null;
+}
+
 // ─── Lógica click: película → player directo, serie → modal ───
 function handleCardClick(item) {
   if (item.type === 'movie') {
@@ -1842,8 +1876,8 @@ function showTooltip(card, item) {
       openModal(item.t, item.img, item.g, item.m, item.y, item.id, item.type);
     }
   };
-  ttAdd.onclick  = e => { e.stopPropagation(); showToast('✅ Agregado a Mi Lista'); };
-  ttLike.onclick = e => { e.stopPropagation(); showToast('👍 ¡Te gusta!'); };
+  ttAdd.onclick  = e => { e.stopPropagation(); if (window.voidflixToggleWatchlist) window.voidflixToggleWatchlist(item); };
+  ttLike.onclick = e => { e.stopPropagation(); if (window.voidflixToggleFavorite) window.voidflixToggleFavorite(item); };
   ttMore.onclick = e => { e.stopPropagation(); openModal(item.t, item.img, item.g, item.m, item.y, item.id, item.type); };
   cancelAnimationFrame(rafId);
   trackCard();
@@ -1976,6 +2010,12 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
   document.getElementById('modal-play-btn').onclick = () => {
     closeModal(() => openPlayer(resolvedId, 'tv', title, 'Temporada 1 · Episodio 1', 1, 1));
   };
+  document.getElementById('modal-list-btn').onclick = () => {
+    if (!window.voidflixToggleWatchlist) return;
+    window.voidflixToggleWatchlist({ id: resolvedId, t: title, img: resolvedImg, g: genre, m: match, y: year, type: contentType || 'tv' });
+    setTimeout(() => window.voidflixSetListButtonState?.('modal-list-btn-label', resolvedId), 150);
+  };
+  if (window.voidflixSetListButtonState) window.voidflixSetListButtonState('modal-list-btn-label', resolvedId);
 
   // Episodios
   const episodes = getEpisodes(resolvedId);
@@ -2180,7 +2220,12 @@ function openMovieModal(tmdbId, title, imgPath, genre, match, year) {
   document.getElementById('mm-play-btn').onclick = () => {
     closeMovieModal(() => openPlayer(id, 'movie', title, year || ''));
   };
-  document.getElementById('mm-list-btn').onclick = () => showToast('✅ ' + title + ' agregado a Mi Lista');
+  document.getElementById('mm-list-btn').onclick = () => {
+    if (!window.voidflixToggleWatchlist) return;
+    window.voidflixToggleWatchlist({ id, t: title, img: resolvedImg, g: genre, m: match, y: year, type: 'movie' });
+    setTimeout(() => window.voidflixSetListButtonState?.('mm-list-btn-label', id), 150);
+  };
+  if (window.voidflixSetListButtonState) window.voidflixSetListButtonState('mm-list-btn-label', id);
 
   const mmOverlay = document.getElementById('movie-modal-overlay');
   mmOverlay.style.display = 'flex';
@@ -2339,7 +2384,10 @@ function setHeroPlayBtn(item, imgUrl) {
       openModal(item.t, imgUrl || null, item.genre, item.match, item.year, item.id, item.type);
     }
   };
-  document.getElementById('hero-btn-list').onclick = () => showToast('✅ ' + item.t + ' agregado a Mi Lista');
+  document.getElementById('hero-btn-list').onclick = () => {
+    if (!window.voidflixToggleWatchlist) return;
+    window.voidflixToggleWatchlist({ id: item.id, t: item.t, img: imgUrl, g: item.genre, m: item.match, y: item.year, type: item.type });
+  };
   document.getElementById('hero-btn-info').onclick = () => {
     if (item.type === 'movie') {
       openMovieModal(item.id, item.t, imgUrl || null, item.genre, item.match, item.year);
@@ -2456,6 +2504,9 @@ resolveAllBackdrops().then(() => initHero());
   import {
     getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
   } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+  import {
+    getFirestore, doc, setDoc, collection, onSnapshot
+  } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAqdzl_23m_pJ5Ajt9dj5BDOmmCRwOBkZg",
@@ -2469,8 +2520,138 @@ resolveAllBackdrops().then(() => initHero());
 
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
+  const db = getFirestore(app);
   const provider = new GoogleAuthProvider();
 
+  // ═══════════════════════════════════════
+  //  MI LISTA · FAVORITOS · CONTINUAR VIENDO (Firestore)
+  //  Estructura: users/{uid}/library/{itemId}
+  // ═══════════════════════════════════════
+  let libraryUnsub = null;
+  window.voidflixLibrary = {}; // id -> datos del ítem + flags
+
+  function libraryDocRef(uid, itemId) {
+    return doc(db, 'users', uid, 'library', String(itemId));
+  }
+
+  // Normaliza cualquier forma de ítem (DATA usa g/m, HERO_ITEMS usa genre/match)
+  function normalizeItem(raw) {
+    return {
+      id: raw.id,
+      t: raw.t || raw.title || '',
+      img: raw.img || '',
+      g: raw.g || raw.genre || '',
+      m: raw.m || raw.match || '',
+      y: raw.y || raw.year || '',
+      type: raw.type || 'movie',
+    };
+  }
+
+  // Convierte un ítem guardado en Firestore al formato que usan cardStd/cardContinue
+  function toCardItem(libItem) {
+    return {
+      id: isNaN(Number(libItem.id)) ? libItem.id : Number(libItem.id),
+      t: libItem.t, img: libItem.img, g: libItem.g, m: libItem.m || '—',
+      y: libItem.y, type: libItem.type
+    };
+  }
+
+  function renderUserRows() {
+    const all = Object.values(window.voidflixLibrary);
+    const favItems    = all.filter(i => i.isFavorite).sort((a,b) => (b.favAt||0)   - (a.favAt||0));
+    const watchItems  = all.filter(i => i.isWatchlist).sort((a,b) => (b.watchAt||0) - (a.watchAt||0));
+    const recentItems = all.filter(i => i.lastViewedAt).sort((a,b) => (b.lastViewedAt||0) - (a.lastViewedAt||0));
+
+    const favWrap   = document.getElementById('row-favorites-wrap');
+    const watchWrap = document.getElementById('row-watchlist-wrap');
+
+    if (favItems.length) {
+      document.getElementById('row-favorites').innerHTML = favItems.map(i => cardStd(toCardItem(i))).join('');
+      favWrap.style.display = '';
+    } else {
+      favWrap.style.display = 'none';
+    }
+
+    if (watchItems.length) {
+      document.getElementById('row-watchlist').innerHTML = watchItems.map(i => cardStd(toCardItem(i))).join('');
+      watchWrap.style.display = '';
+    } else {
+      watchWrap.style.display = 'none';
+    }
+
+    // Si hay historial real, reemplaza la fila demo de "Continuar viendo"
+    if (recentItems.length) {
+      document.getElementById('row-continue').innerHTML = recentItems.slice(0, 20)
+        .map(i => cardContinue({ ...toCardItem(i), p: i.progress || 8 })).join('');
+    }
+  }
+
+  function resetUserRows() {
+    window.voidflixLibrary = {};
+    document.getElementById('row-favorites-wrap').style.display = 'none';
+    document.getElementById('row-watchlist-wrap').style.display = 'none';
+    if (typeof DATA !== 'undefined' && typeof cardContinue === 'function') {
+      document.getElementById('row-continue').innerHTML = DATA.continue.map(c => cardContinue(c)).join('');
+    }
+  }
+
+  function subscribeLibrary(uid) {
+    if (libraryUnsub) libraryUnsub();
+    window.voidflixLibrary = {};
+    libraryUnsub = onSnapshot(collection(db, 'users', uid, 'library'), (snap) => {
+      const lib = {};
+      snap.forEach(d => { lib[d.id] = { id: d.id, ...d.data() }; });
+      window.voidflixLibrary = lib;
+      renderUserRows();
+    }, (err) => console.error('Error leyendo tu biblioteca:', err));
+  }
+
+  window.voidflixToggleFavorite = async function (rawItem) {
+    if (!auth.currentUser) { showToast('Inicia sesión para guardar favoritos'); return; }
+    const uid  = auth.currentUser.uid;
+    const item = normalizeItem(rawItem);
+    const existing = window.voidflixLibrary[String(item.id)];
+    const nowFav = !(existing && existing.isFavorite);
+    try {
+      await setDoc(libraryDocRef(uid, item.id), {
+        ...item, isFavorite: nowFav, favAt: nowFav ? Date.now() : (existing?.favAt || null)
+      }, { merge: true });
+      showToast(nowFav ? ('❤️ ' + item.t + ' agregado a favoritos') : ('Quitado de favoritos'));
+    } catch (err) { console.error(err); showToast('No se pudo actualizar favoritos'); }
+  };
+
+  window.voidflixToggleWatchlist = async function (rawItem) {
+    if (!auth.currentUser) { showToast('Inicia sesión para guardar tu lista'); return; }
+    const uid  = auth.currentUser.uid;
+    const item = normalizeItem(rawItem);
+    const existing = window.voidflixLibrary[String(item.id)];
+    const nowWatch = !(existing && existing.isWatchlist);
+    try {
+      await setDoc(libraryDocRef(uid, item.id), {
+        ...item, isWatchlist: nowWatch, watchAt: nowWatch ? Date.now() : (existing?.watchAt || null)
+      }, { merge: true });
+      showToast(nowWatch ? ('✅ ' + item.t + ' agregado a Mi Lista') : ('Quitado de Mi Lista'));
+    } catch (err) { console.error(err); showToast('No se pudo actualizar tu lista'); }
+  };
+
+  window.voidflixLogView = async function (rawItem) {
+    if (!auth.currentUser) return; // sin sesión, no se guarda historial
+    const uid  = auth.currentUser.uid;
+    const item = normalizeItem(rawItem);
+    try {
+      await setDoc(libraryDocRef(uid, item.id), {
+        ...item, lastViewedAt: Date.now(), progress: 8
+      }, { merge: true });
+    } catch (err) { console.error(err); }
+  };
+
+  // Refresca el texto de los botones "Mi Lista" abiertos actualmente (modales)
+  window.voidflixSetListButtonState = function (labelId, itemId) {
+    const label = document.getElementById(labelId);
+    if (!label) return;
+    const inWatchlist = !!(window.voidflixLibrary[String(itemId)]?.isWatchlist);
+    label.textContent = inWatchlist ? '✓ En Mi Lista' : 'Mi Lista';
+  };
   const loginGate = document.getElementById('login-gate');
   const googleBtn = document.getElementById('google-signin-btn');
   const loginError = document.getElementById('login-error');
@@ -2501,10 +2682,13 @@ resolveAllBackdrops().then(() => initHero());
       loginGate.classList.remove('visible');
       document.body.style.overflow = '';
       updateUserUI(user);
+      subscribeLibrary(user.uid);
     } else {
       loginGate.classList.add('visible');
       document.body.style.overflow = 'hidden';
       setSigningIn(false);
+      if (libraryUnsub) { libraryUnsub(); libraryUnsub = null; }
+      resetUserRows();
     }
   });
 
