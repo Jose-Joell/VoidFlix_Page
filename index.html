@@ -1418,7 +1418,8 @@ async function fetchMedia(id, type) {
     ]);
     const imgData = await imgRes.json();
     const vidData = await vidRes.json();
-    const backdropPath = (imgData.backdrops && imgData.backdrops[0]) ? imgData.backdrops[0].file_path : null;
+    const backdropPath = (imgData.backdrops && imgData.backdrops[0]) ? imgData.backdrops[0].file_path
+                        : (imgData.posters && imgData.posters[0]) ? imgData.posters[0].file_path : null;
     const logos  = imgData.logos || [];
     const enLogo = logos.find(l => l.iso_639_1 === 'en' && l.file_path.endsWith('.png'))
                 || logos.find(l => l.file_path.endsWith('.png'))
@@ -1464,7 +1465,8 @@ async function registerDynamicItem(id, type) {
     const data = await res.json();
     if (data.success === false) throw new Error(data.status_message || 'No encontrado en TMDB');
 
-    const backdropPath = data.images?.backdrops?.[0]?.file_path || data.backdrop_path || null;
+    const backdropPath = data.images?.backdrops?.[0]?.file_path || data.backdrop_path
+                        || data.images?.posters?.[0]?.file_path || data.poster_path || null;
     const logos  = data.images?.logos || [];
     const enLogo = logos.find(l => l.iso_639_1 === 'en' && l.file_path.endsWith('.png'))
                 || logos.find(l => l.file_path.endsWith('.png'))
@@ -1485,6 +1487,7 @@ async function registerDynamicItem(id, type) {
       y: (data.release_date || data.first_air_date || '').slice(0, 4),
       noLogo: !enLogo,
     };
+    console.log('[VOIDFLIX] Registrado desde TMDB:', item.t, '| img:', !!item.img, '| logo:', !!item.logo, '| match:', item.m || '(sin dato)');
 
     DATA.dynamic.push(item);
     mediaCache[id] = { img: item.img, logo: item.logo, trailer: item.trailer };
@@ -2121,7 +2124,9 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
   }
 
   document.getElementById('modal-title-text').textContent = title;
-  document.getElementById('modal-match-text').textContent = (match || '95%') + ' match';
+  const matchTextEl = document.getElementById('modal-match-text');
+  if (match) { matchTextEl.textContent = match + ' match'; matchTextEl.style.display = ''; }
+  else { matchTextEl.style.display = 'none'; }
   document.getElementById('modal-year-text').textContent  = year  || '2024';
   document.getElementById('modal-genre').textContent      = genre || '';
   // Descripción real de la serie
@@ -2372,7 +2377,9 @@ function openMovieModal(tmdbId, title, imgPath, genre, match, year) {
   const ext = MOVIE_EXTRA[id] || { dur:'', rating:'', desc:'' };
 
   // Texto
-  document.getElementById('mm-match').textContent  = (match || '95%') + ' match';
+  const mmMatchEl = document.getElementById('mm-match');
+  if (match) { mmMatchEl.textContent = match + ' match'; mmMatchEl.style.display = ''; }
+  else { mmMatchEl.style.display = 'none'; }
   document.getElementById('mm-year').textContent   = year  || '';
   document.getElementById('mm-dur').textContent    = ext.dur || '';
   document.getElementById('mm-rating').textContent = ext.rating || '';
@@ -2500,7 +2507,7 @@ function scrollRow(btn,dir){ btn.closest('.row-scroll-wrap').querySelector('.row
 // ─── MODAL MI LISTA ───
 function toMyListCardItem(libItem){
   return { id: isNaN(Number(libItem.id)) ? libItem.id : Number(libItem.id),
-    t: libItem.t, img: libItem.img, g: libItem.g, m: libItem.m || '—', y: libItem.y, type: libItem.type,
+    t: libItem.t, img: libItem.img, g: libItem.g, m: libItem.m || '', y: libItem.y, type: libItem.type,
     logo: libItem.logo || null, noLogo: libItem.noLogo !== false };
 }
 function renderMyListModal(){
@@ -2822,7 +2829,7 @@ resolveAllBackdrops().then(() => initHero());
   function toCardItem(libItem) {
     return {
       id: isNaN(Number(libItem.id)) ? libItem.id : Number(libItem.id),
-      t: libItem.t, img: libItem.img, g: libItem.g, m: libItem.m || '—',
+      t: libItem.t, img: libItem.img, g: libItem.g, m: libItem.m || '',
       y: libItem.y, type: libItem.type, logo: libItem.logo || null, noLogo: libItem.noLogo !== false
     };
   }
