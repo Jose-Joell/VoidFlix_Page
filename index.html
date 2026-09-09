@@ -693,6 +693,18 @@ button { cursor:pointer; font-family:'Barlow',sans-serif; }
 .modal-info-val { color:var(--muted); }
 .modal-episodes { margin-top:20px; }
 .modal-ep-title { font-size:.85rem; font-weight:700; margin-bottom:12px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; }
+.modal-ep-header { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:2px; }
+.modal-ep-header .modal-ep-title { margin-bottom:0; }
+.modal-season-select {
+  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14); color:#fff;
+  font-family:'Rajdhani',sans-serif; font-size:.85rem; font-weight:600; letter-spacing:.3px;
+  padding:7px 30px 7px 12px; border-radius:5px; cursor:pointer; appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2300ff9d' stroke-width='3'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 10px center;
+}
+.modal-season-select:hover { border-color:var(--green); }
+.modal-season-select:focus { outline:none; border-color:var(--green); }
+.modal-season-select option { background:#0d140e; color:#fff; }
 
 /* Episodio — botón play integrado */
 .ep-item { display:flex; gap:14px; padding:12px 0; border-bottom:1px solid rgba(255,255,255,.04); align-items:center; transition:all .15s; border-radius:4px; }
@@ -1061,7 +1073,10 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
         <div class="modal-info-item"><div class="modal-info-label">Producción</div><div class="modal-info-val">2026 · VOIDFLIX Original</div></div>
       </div>
       <div class="modal-episodes">
-        <div class="modal-ep-title">Temporada 1 · Episodios</div>
+        <div class="modal-ep-header">
+          <div class="modal-ep-title" id="modal-ep-title">Temporada 1 · Episodios</div>
+          <select class="modal-season-select" id="modal-season-select" style="display:none"></select>
+        </div>
         <div id="modal-ep-list"></div>
       </div>
     </div>
@@ -1749,6 +1764,24 @@ function getEpisodes(id) {
 // Para series sin episodios curados a mano: trae la temporada real desde TMDB
 let modalEpisodesToken = 0;
 const SEASON_CACHE = {};
+const SHOW_SEASON_COUNT_CACHE = {};
+
+// Cuántas temporadas tiene realmente una serie (para armar el selector del modal)
+async function getShowSeasonCount(id) {
+  if (SHOW_SEASON_COUNT_CACHE[id]) return SHOW_SEASON_COUNT_CACHE[id];
+  const dyn = DATA.dynamic.find(d => d.id === id); // ya se sabe si vino del buscador
+  if (dyn && dyn.seasons) { SHOW_SEASON_COUNT_CACHE[id] = dyn.seasons; return dyn.seasons; }
+  try {
+    const res  = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${TMDB_KEY}&language=es-MX`);
+    const data = await res.json();
+    const seasons = data.number_of_seasons || 1;
+    SHOW_SEASON_COUNT_CACHE[id] = seasons;
+    return seasons;
+  } catch (err) {
+    console.error('[VOIDFLIX] Error obteniendo temporadas de TMDB para id ' + id + ':', err);
+    return 1;
+  }
+}
 async function fetchSeasonEpisodes(id, season = 1) {
   const key = id + '-' + season;
   if (SEASON_CACHE[key]) return SEASON_CACHE[key];
@@ -2155,8 +2188,9 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
 
   // Botón "Reproducir T1 E1" del modal
   const resolvedId = tmdbId || (() => { for(const arr of Object.values(DATA)){ const found = arr.find(d => d.t === title); if(found) return found.id; } return 0; })();
+  let modalPlaySeason = 1; // se actualiza si el usuario cambia de temporada en el selector
   document.getElementById('modal-play-btn').onclick = () => {
-    closeModal(() => openPlayer(resolvedId, 'tv', title, 'Temporada 1 · Episodio 1', 1, 1));
+    closeModal(() => openPlayer(resolvedId, 'tv', title, `Temporada ${modalPlaySeason} · Episodio 1`, modalPlaySeason, 1));
   };
   document.getElementById('modal-list-btn').onclick = () => {
     if (!window.voidflixToggleWatchlist) return;
@@ -2166,8 +2200,10 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
   if (window.voidflixSetListButtonState) window.voidflixSetListButtonState('modal-list-btn-label', resolvedId);
 
   // Episodios: usa datos curados si existen; si no, trae la temporada real de TMDB
-  const epListEl = document.getElementById('modal-ep-list');
-  const epRequestToken = ++modalEpisodesToken; // evita pisar el modal si el usuario abre otro antes de que termine de cargar
+  const epListEl       = document.getElementById('modal-ep-list');
+  const epTitleEl       = document.getElementById('modal-ep-title');
+  const seasonSelectEl  = document.getElementById('modal-season-select');
+  const epRequestToken  = ++modalEpisodesToken; // evita pisar el modal si el usuario abre otro antes de que termine de cargar
 
   function buildEpisodeHTML(ep) {
     return `
@@ -2194,21 +2230,40 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
     if (epRequestToken !== modalEpisodesToken) return; // el usuario ya abrió otro modal mientras cargaba
     epListEl.innerHTML = episodes.map(buildEpisodeHTML).join('');
   }
-
-  if (EPISODES_BY_SHOW[resolvedId]) {
-    renderEpisodes(EPISODES_BY_SHOW[resolvedId]);
-  } else {
+  function loadSeason(season) {
+    if (epRequestToken !== modalEpisodesToken) return;
+    modalPlaySeason = season;
+    epTitleEl.textContent = `Temporada ${season} · Episodios`;
+    // Los episodios curados a mano solo cubren la temporada 1; el resto siempre viene de TMDB
+    if (season === 1 && EPISODES_BY_SHOW[resolvedId]) {
+      renderEpisodes(EPISODES_BY_SHOW[resolvedId]);
+      return;
+    }
     epListEl.innerHTML = `<div class="ep-loading">Cargando episodios reales…</div>`;
-    fetchSeasonEpisodes(resolvedId, 1).then(episodes => {
-      renderEpisodes(episodes.length ? episodes : EPISODES_BY_SHOW.default);
+    fetchSeasonEpisodes(resolvedId, season).then(episodes => {
+      if (episodes.length) { renderEpisodes(episodes); return; }
+      if (season === 1) { renderEpisodes(EPISODES_BY_SHOW.default); return; }
+      if (epRequestToken === modalEpisodesToken) {
+        epListEl.innerHTML = `<div class="ep-loading">No se encontraron episodios para esta temporada.</div>`;
+      }
     });
   }
 
-  // Temporadas reales si el ítem vino del buscador
-  const dynMeta = DATA.dynamic.find(d => d.id === resolvedId);
-  if (dynMeta && dynMeta.seasons) {
-    document.getElementById('modal-dur-text').textContent = dynMeta.seasons + (dynMeta.seasons === 1 ? ' Temporada' : ' Temporadas');
-  }
+  // Arma el selector de temporadas (se oculta si la serie solo tiene 1)
+  seasonSelectEl.style.display = 'none';
+  seasonSelectEl.innerHTML = '';
+  loadSeason(1); // muestra algo de inmediato mientras se confirma el total real de temporadas
+
+  getShowSeasonCount(resolvedId).then(totalSeasons => {
+    if (epRequestToken !== modalEpisodesToken) return;
+    if (totalSeasons > 1) {
+      seasonSelectEl.innerHTML = Array.from({ length: totalSeasons }, (_, i) =>
+        `<option value="${i + 1}">Temporada ${i + 1}</option>`).join('');
+      seasonSelectEl.style.display = '';
+      seasonSelectEl.onchange = () => loadSeason(Number(seasonSelectEl.value));
+    }
+    document.getElementById('modal-dur-text').textContent = totalSeasons + (totalSeasons === 1 ? ' Temporada' : ' Temporadas');
+  });
 
   const seriesOverlay = document.getElementById('modal');
   seriesOverlay.style.display = 'flex';
