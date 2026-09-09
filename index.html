@@ -2767,15 +2767,27 @@ resolveAllBackdrops().then(() => initHero());
     window.voidflixRenderMyListIfOpen?.();
   }
 
-  function subscribeLibrary(uid) {
+  function subscribeLibrary(uid, attempt = 0) {
     if (libraryUnsub) libraryUnsub();
     window.voidflixLibrary = {};
-    libraryUnsub = onSnapshot(collection(db, 'users', uid, 'library'), (snap) => {
-      const lib = {};
-      snap.forEach(d => { lib[d.id] = { id: d.id, ...d.data() }; });
-      window.voidflixLibrary = lib;
-      renderUserRows();
-    }, (err) => console.error('Error leyendo tu biblioteca:', err));
+    libraryUnsub = onSnapshot(
+      collection(db, 'users', uid, 'library'),
+      (snap) => {
+        const lib = {};
+        snap.forEach(d => { lib[d.id] = { id: d.id, ...d.data() }; });
+        window.voidflixLibrary = lib;
+        renderUserRows();
+        console.log('[VOIDFLIX] Biblioteca sincronizada (' + Object.keys(lib).length + ' ítems)');
+      },
+      (err) => {
+        console.error('[VOIDFLIX] Error leyendo tu biblioteca (intento ' + (attempt + 1) + '):', err);
+        // Reintenta unas pocas veces: en un arranque "en frío" del navegador,
+        // a veces Firestore intenta conectar antes de que el token de sesión esté listo.
+        if (attempt < 3 && auth.currentUser && auth.currentUser.uid === uid) {
+          setTimeout(() => subscribeLibrary(uid, attempt + 1), 800 * (attempt + 1));
+        }
+      }
+    );
   }
 
   window.voidflixToggleFavorite = async function (rawItem) {
@@ -2853,11 +2865,19 @@ resolveAllBackdrops().then(() => initHero());
     }
   });
 
-  onAuthStateChanged(auth, (user) => {
+  onAuthStateChanged(auth, async (user) => {
     if (user) {
       loginGate.classList.remove('visible');
       document.body.style.overflow = '';
       updateUserUI(user);
+      try {
+        // Fuerza a que el token esté listo antes de abrir la conexión con Firestore.
+        // En un arranque "en frío" del navegador, Firestore a veces intentaba
+        // conectar un instante antes de que el token existiera, y fallaba en silencio.
+        await user.getIdToken();
+      } catch (err) {
+        console.error('[VOIDFLIX] Error obteniendo token de sesión:', err);
+      }
       subscribeLibrary(user.uid);
     } else {
       loginGate.classList.add('visible');
