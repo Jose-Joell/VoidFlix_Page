@@ -304,6 +304,21 @@ button { cursor:pointer; font-family:'Barlow',sans-serif; }
 .card-logo { max-width:70%; max-height:42px; width:auto; height:auto; object-fit:contain; object-position:left bottom; filter:drop-shadow(0 1px 4px rgba(0,0,0,.9)) drop-shadow(0 0 8px rgba(0,0,0,.7)); transition:opacity .25s; }
 .card:hover .card-logo { opacity:0; }
 
+/* Título de respaldo: se muestra cuando el contenido no tiene un logo disponible (p.ej. resultados de búsqueda) */
+.card-title-fallback {
+  position:absolute; inset:0; z-index:2; pointer-events:none; border-radius:4px;
+  display:flex; align-items:flex-end;
+  background:linear-gradient(0deg, rgba(0,0,0,.85) 0%, rgba(0,0,0,.35) 45%, transparent 75%);
+}
+.card-title-fallback span {
+  padding:0 10px 10px; font-family:'Rajdhani',sans-serif; font-weight:600; font-size:.92rem;
+  color:#fff; letter-spacing:.2px; line-height:1.2;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  text-shadow:0 1px 4px rgba(0,0,0,.9);
+}
+.card:hover .card-title-fallback { opacity:0; transition:opacity .25s; }
+.row.top10 .card-title-fallback span { font-size:.85rem; }
+
 /* ═══════════════════════════════════════
    FULLSCREEN PLAYER
 ═══════════════════════════════════════ */
@@ -1253,7 +1268,8 @@ function openPlayer(id, type, title, subtitle = '', season = 1, episode = 1) {
     const found = findItemInData(id);
     window.voidflixLogView({
       id, t: title, type,
-      img: found?.img || '', g: found?.g || '', m: found?.m || '', y: found?.y || ''
+      img: found?.img || '', g: found?.g || '', m: found?.m || '', y: found?.y || '',
+      logo: found?.logo || null, noLogo: found ? !!found.noLogo : true
     });
   }
 
@@ -1766,6 +1782,11 @@ function logoTag(logo, alt, noLogo){
   if(!logo || noLogo) return '';
   return `<div class="card-logo-wrap"><img src="${logo}" alt="${alt} logo" class="card-logo" loading="lazy" onerror="this.parentElement.style.display='none'"></div>`;
 }
+// Respaldo automático: si el ítem no trae logo (p.ej. algo agregado desde el buscador), muestra su título con degradado
+function titleFallback(logo, title, noLogo){
+  if(logo && !noLogo) return '';
+  return `<div class="card-title-fallback"><span>${title}</span></div>`;
+}
 
 // ─── Buscar datos completos de un ítem por ID (para favoritos/lista/historial) ───
 function findItemInData(id) {
@@ -1791,6 +1812,7 @@ function cardStd(item){
     >
     ${imgTag(item.img, item.t)}
     ${logoTag(item.logo, item.t, item.noLogo)}
+    ${titleFallback(item.logo, item.t, item.noLogo)}
   </div>`;
 }
 function cardContinue(item){
@@ -1799,6 +1821,7 @@ function cardContinue(item){
     >
     ${imgTag(item.img, item.t)}
     ${logoTag(item.logo, item.t, item.noLogo)}
+    ${titleFallback(item.logo, item.t, item.noLogo)}
     <div class="card-progress"><div class="card-progress-fill" style="width:${item.p}%"></div></div>
   </div>`;
 }
@@ -1810,6 +1833,7 @@ function cardTop10(item, i){
     <div class="card-thumb-part">
       ${imgTag(item.img, item.t)}
       ${logoTag(item.logo, item.t, item.noLogo)}
+      ${titleFallback(item.logo, item.t, item.noLogo)}
     </div>
   </div>`;
 }
@@ -2136,7 +2160,7 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
   };
   document.getElementById('modal-list-btn').onclick = () => {
     if (!window.voidflixToggleWatchlist) return;
-    window.voidflixToggleWatchlist({ id: resolvedId, t: title, img: resolvedImg, g: genre, m: match, y: year, type: contentType || 'tv' });
+    window.voidflixToggleWatchlist({ id: resolvedId, t: title, img: resolvedImg, g: genre, m: match, y: year, type: contentType || 'tv', logo: foundLogo || null, noLogo: !foundLogo });
     setTimeout(() => window.voidflixSetListButtonState?.('modal-list-btn-label', resolvedId), 150);
   };
   if (window.voidflixSetListButtonState) window.voidflixSetListButtonState('modal-list-btn-label', resolvedId);
@@ -2369,7 +2393,7 @@ function openMovieModal(tmdbId, title, imgPath, genre, match, year) {
   };
   document.getElementById('mm-list-btn').onclick = () => {
     if (!window.voidflixToggleWatchlist) return;
-    window.voidflixToggleWatchlist({ id, t: title, img: resolvedImg, g: genre, m: match, y: year, type: 'movie' });
+    window.voidflixToggleWatchlist({ id, t: title, img: resolvedImg, g: genre, m: match, y: year, type: 'movie', logo: foundLogo || null, noLogo: !foundLogo });
     setTimeout(() => window.voidflixSetListButtonState?.('mm-list-btn-label', id), 150);
   };
   if (window.voidflixSetListButtonState) window.voidflixSetListButtonState('mm-list-btn-label', id);
@@ -2421,7 +2445,8 @@ function scrollRow(btn,dir){ btn.closest('.row-scroll-wrap').querySelector('.row
 // ─── MODAL MI LISTA ───
 function toMyListCardItem(libItem){
   return { id: isNaN(Number(libItem.id)) ? libItem.id : Number(libItem.id),
-    t: libItem.t, img: libItem.img, g: libItem.g, m: libItem.m || '—', y: libItem.y, type: libItem.type };
+    t: libItem.t, img: libItem.img, g: libItem.g, m: libItem.m || '—', y: libItem.y, type: libItem.type,
+    logo: libItem.logo || null, noLogo: libItem.noLogo !== false };
 }
 function renderMyListModal(){
   const lib = window.voidflixLibrary || {};
@@ -2575,7 +2600,7 @@ function setHeroPlayBtn(item, imgUrl) {
   };
   document.getElementById('hero-btn-list').onclick = () => {
     if (!window.voidflixToggleWatchlist) return;
-    window.voidflixToggleWatchlist({ id: item.id, t: item.t, img: imgUrl, g: item.genre, m: item.match, y: item.year, type: item.type });
+    window.voidflixToggleWatchlist({ id: item.id, t: item.t, img: imgUrl, g: item.genre, m: item.match, y: item.year, type: item.type, logo: item.logo || null, noLogo: item.logo ? !!item.noLogo : true });
   };
   document.getElementById('hero-btn-info').onclick = () => {
     if (item.type === 'movie') {
@@ -2733,6 +2758,8 @@ resolveAllBackdrops().then(() => initHero());
       m: raw.m || raw.match || '',
       y: raw.y || raw.year || '',
       type: raw.type || 'movie',
+      logo: raw.logo || null,
+      noLogo: raw.logo ? !!raw.noLogo : true,
     };
   }
 
@@ -2741,7 +2768,7 @@ resolveAllBackdrops().then(() => initHero());
     return {
       id: isNaN(Number(libItem.id)) ? libItem.id : Number(libItem.id),
       t: libItem.t, img: libItem.img, g: libItem.g, m: libItem.m || '—',
-      y: libItem.y, type: libItem.type
+      y: libItem.y, type: libItem.type, logo: libItem.logo || null, noLogo: libItem.noLogo !== false
     };
   }
 
