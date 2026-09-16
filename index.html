@@ -1013,6 +1013,7 @@ footer { padding:60px 4% 40px; border-top:1px solid rgba(29,185,84,.08); backgro
         </button>
       </div>
       <div class="mm-genre">Géneros: <span id="mm-genre"></span></div>
+      <div class="mm-genre" style="margin-top:4px">Reparto: <span id="mm-cast" style="color:var(--muted)"></span></div>
     </div>
   </div>
 </div>
@@ -1187,24 +1188,9 @@ const SERVERS = [
     if (type === 'movie') return `https://www.2embed.cc/embed/${id}`;
     return `https://www.2embed.cc/embedtv/${id}&s=${season}&e=${episode}`;
   },
-  // 3 — VidSrc.cc (multi-servidor interno)
-(id, type, season, episode) => {
-  if (type === 'movie') return `https://vidsrc.cc/v2/embed/movie/${id}`;
-  return `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${episode}`;
-},
-// 4 — Embed.su
-(id, type, season, episode) => {
-  if (type === 'movie') return `https://embed.su/embed/movie/${id}`;
-  return `https://embed.su/embed/tv/${id}/${season}/${episode}`;
-},
-// 5 — VidLink
-(id, type, season, episode) => {
-  if (type === 'movie') return `https://vidlink.pro/movie/${id}`;
-  return `https://vidlink.pro/tv/${id}/${season}/${episode}`;
-},
 ];
 
-const SERVER_NAMES = ['VidSrc', 'VidSrc 2', '2Embed', 'VidSrc.cc', 'Embed.su', 'VidLink'];
+const SERVER_NAMES = ['VidSrc', 'VidSrc 2', '2Embed'];
 
 // Estado del player
 let playerState = {
@@ -2285,6 +2271,11 @@ function openModal(title, imgPath, genre, match, year, tmdbId, contentType) {
     document.getElementById('modal-dur-text').textContent = totalSeasons + (totalSeasons === 1 ? ' Temporada' : ' Temporadas');
   });
 
+  // Enriquece silenciosamente el modal con datos reales de TMDB
+  // (reparto, géneros, imagen si faltaba — sin bloquear la apertura)
+  const seriesEnrichToken = { current: epRequestToken };
+  if (resolvedId) enrichModalFromTMDB(resolvedId, 'tv', epRequestToken, seriesEnrichToken);
+
   const seriesOverlay = document.getElementById('modal');
   seriesOverlay.style.display = 'flex';
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -2386,6 +2377,64 @@ const SERIES_DESC = {
   88803:  'Thorfinn, un joven guerrero vikingo lleno de odio y sed de venganza, descubre que la verdadera fortaleza no está en la espada sino en vivir sin enemigos. Una épica de redención y crecimiento.',
 };
 
+// Caché de datos enriquecidos de TMDB para el modal (reparto, géneros, imagen, sinopsis)
+const MODAL_ENRICH_CACHE = {};
+
+// Enriquece el modal con datos reales de TMDB cuando los datos disponibles están incompletos.
+// Llena silenciosamente imagen, géneros, reparto y sinopsis en segundo plano sin bloquear la apertura del modal.
+async function enrichModalFromTMDB(id, type, requestToken, tokenRef) {
+  if (MODAL_ENRICH_CACHE[id]) {
+    const c = MODAL_ENRICH_CACHE[id];
+    if (requestToken !== tokenRef.current) return;
+    if (type === 'tv') {
+      if (c.img && !document.getElementById('modal-hero-img').src.includes('image.tmdb')) {
+        document.getElementById('modal-hero-img').src = c.img;
+      }
+      if (c.cast) document.getElementById('modal-cast').textContent = c.cast;
+      if (c.genre) document.getElementById('modal-genre').textContent = c.genre;
+      if (c.desc && !SERIES_DESC[id]) document.getElementById('modal-desc-text').textContent = c.desc;
+    } else {
+      if (c.img && !document.getElementById('mm-hero-img').src.includes('image.tmdb')) {
+        document.getElementById('mm-hero-img').src = c.img;
+      }
+      if (c.cast) document.getElementById('mm-cast').textContent = c.cast;
+      if (c.genre) document.getElementById('mm-genre').textContent = c.genre;
+    }
+    return;
+  }
+  try {
+    const res  = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}&language=es-MX&append_to_response=credits,images&include_image_language=en,null`);
+    const data = await res.json();
+    if (requestToken !== tokenRef.current) return; // el usuario ya cerró o abrió otro modal
+
+    const cast = (data.credits?.cast || []).slice(0, 5).map(a => a.name).join(', ');
+    const genre = (data.genres || []).map(g => g.name).join(' · ');
+    const desc  = data.overview || '';
+    const backdropPath = data.images?.backdrops?.[0]?.file_path || data.backdrop_path
+                       || data.images?.posters?.[0]?.file_path  || data.poster_path || null;
+    const img = backdropPath ? TMDB_IMG + backdropPath : null;
+
+    MODAL_ENRICH_CACHE[id] = { cast, genre, desc, img };
+
+    if (type === 'tv') {
+      if (cast)  document.getElementById('modal-cast').textContent = cast;
+      if (genre) document.getElementById('modal-genre').textContent = genre;
+      if (desc && !SERIES_DESC[id]) document.getElementById('modal-desc-text').textContent = desc;
+      if (img && !document.getElementById('modal-hero-img').src.includes('image.tmdb')) {
+        document.getElementById('modal-hero-img').src = img;
+      }
+    } else {
+      if (cast)  document.getElementById('mm-cast').textContent = cast;
+      if (genre) document.getElementById('mm-genre').textContent = genre;
+      if (img && !document.getElementById('mm-hero-img').src.includes('image.tmdb')) {
+        document.getElementById('mm-hero-img').src = img;
+      }
+    }
+  } catch (err) {
+    console.error('[VOIDFLIX] Error enriqueciendo modal para id ' + id + ':', err);
+  }
+}
+
 
 function openMovieModal(tmdbId, title, imgPath, genre, match, year) {
   const id  = tmdbId || 0;
@@ -2474,6 +2523,10 @@ function openMovieModal(tmdbId, title, imgPath, genre, match, year) {
     setTimeout(() => window.voidflixSetListButtonState?.('mm-list-btn-label', id), 150);
   };
   if (window.voidflixSetListButtonState) window.voidflixSetListButtonState('mm-list-btn-label', id);
+
+  // Enriquece silenciosamente el modal con datos reales de TMDB (reparto, géneros, imagen si faltaba)
+  const movieEnrichToken = { current: id };
+  if (id) enrichModalFromTMDB(id, 'movie', id, movieEnrichToken);
 
   const mmOverlay = document.getElementById('movie-modal-overlay');
   mmOverlay.style.display = 'flex';
