@@ -1282,10 +1282,16 @@ function openPlayer(id, type, title, subtitle = '', season = 1, episode = 1) {
   // Registrar en "Continuar viendo" (Firestore, solo si hay sesión iniciada)
   if (window.voidflixLogView) {
     const found = findItemInData(id);
+    // Si ya está guardado en la biblioteca, reutiliza esos datos en vez de sobrescribirlos con vacío
+    const saved = window.voidflixLibrary?.[String(id)] || null;
     window.voidflixLogView({
       id, t: title, type,
-      img: found?.img || '', g: found?.g || '', m: found?.m || '', y: found?.y || '',
-      logo: found?.logo || null, noLogo: found ? !!found.noLogo : true
+      img:  found?.img  || saved?.img  || '',
+      g:    found?.g    || saved?.g    || '',
+      m:    found?.m    || saved?.m    || '',
+      y:    found?.y    || saved?.y    || '',
+      logo: found?.logo || saved?.logo || null,
+      noLogo: (found?.logo || saved?.logo) ? false : true
     });
   }
 
@@ -2902,6 +2908,43 @@ resolveAllBackdrops().then(() => initHero());
     };
   }
 
+  // Completa desde TMDB los ítems que se guardaron sin imagen/logo (datos viejos)
+  // y corrige el documento en Firestore, para que la próxima vez ya venga completo.
+  const backfilledIds = new Set();
+  async function backfillMissingArtwork(items) {
+    const pending = items.filter(i => !i.img && !backfilledIds.has(String(i.id)));
+    if (!pending.length) return;
+    for (const libItem of pending.slice(0, 8)) { // de a pocos, para no saturar la API
+      backfilledIds.add(String(libItem.id));
+      const type = libItem.type === 'movie' ? 'movie' : 'tv';
+      try {
+        const res  = await fetch(`https://api.themoviedb.org/3/${type}/${libItem.id}?api_key=${TMDB_KEY}&language=es-MX&append_to_response=images&include_image_language=en,null`);
+        const data = await res.json();
+        if (data.success === false) continue;
+
+        const backdropPath = data.images?.backdrops?.[0]?.file_path || data.backdrop_path
+                           || data.images?.posters?.[0]?.file_path  || data.poster_path || null;
+        const logos  = data.images?.logos || [];
+        const enLogo = logos.find(l => l.iso_639_1 === 'en' && l.file_path.endsWith('.png'))
+                    || logos.find(l => l.file_path.endsWith('.png')) || logos[0] || null;
+        if (!backdropPath && !enLogo) continue;
+
+        const patch = {};
+        if (backdropPath) patch.img = TMDB_IMG + backdropPath;
+        if (enLogo) { patch.logo = `https://image.tmdb.org/t/p/w300${enLogo.file_path}`; patch.noLogo = false; }
+        if (!libItem.g && data.genres?.length) patch.g = data.genres.map(g => g.name).join(' · ');
+        if (!libItem.m && data.vote_average)   patch.m = `${Math.round(data.vote_average * 10)}%`;
+
+        if (auth.currentUser) {
+          await setDoc(libraryDocRef(auth.currentUser.uid, libItem.id), patch, { merge: true });
+          console.log('[VOIDFLIX] Imagen completada para:', libItem.t);
+        }
+      } catch (err) {
+        console.error('[VOIDFLIX] No se pudo completar la imagen de ' + libItem.t + ':', err);
+      }
+    }
+  }
+
   function renderUserRows() {
     const all = Object.values(window.voidflixLibrary);
     const recentItems = all.filter(i => i.lastViewedAt).sort((a,b) => (b.lastViewedAt||0) - (a.lastViewedAt||0));
@@ -2914,6 +2957,9 @@ resolveAllBackdrops().then(() => initHero());
 
     // Refresca el modal "Mi Lista" si está abierto en este momento
     window.voidflixRenderMyListIfOpen?.();
+
+    // Repara en segundo plano los ítems guardados sin imagen
+    backfillMissingArtwork(all);
   }
 
   function resetUserRows() {
