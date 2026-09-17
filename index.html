@@ -1188,9 +1188,24 @@ const SERVERS = [
     if (type === 'movie') return `https://www.2embed.cc/embed/${id}`;
     return `https://www.2embed.cc/embedtv/${id}&s=${season}&e=${episode}`;
   },
+  // 3 — VidSrc.cc (multi-servidor interno)
+(id, type, season, episode) => {
+  if (type === 'movie') return `https://vidsrc.cc/v2/embed/movie/${id}`;
+  return `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${episode}`;
+},
+// 4 — Embed.su
+(id, type, season, episode) => {
+  if (type === 'movie') return `https://embed.su/embed/movie/${id}`;
+  return `https://embed.su/embed/tv/${id}/${season}/${episode}`;
+},
+// 5 — VidLink
+(id, type, season, episode) => {
+  if (type === 'movie') return `https://vidlink.pro/movie/${id}`;
+  return `https://vidlink.pro/tv/${id}/${season}/${episode}`;
+},
 ];
 
-const SERVER_NAMES = ['VidSrc', 'VidSrc 2', '2Embed'];
+const SERVER_NAMES = ['VidSrc', 'VidSrc 2', '2Embed', 'VidSrc.cc', 'Embed.su', 'VidLink'];
 
 // Estado del player
 let playerState = {
